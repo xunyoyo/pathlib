@@ -1,31 +1,67 @@
-typealias PurePath=@immut/list.T[String]
+///| 
+typealias PurePath = @immut/list.T[String]
 
 ///|
-struct Path {
+struct WPath {
   path : PurePath
-  desk : Char
+  desk : String
 }
 
 ///|
-pub fn path(str : String) -> Path {
-  { path: Cons(str, Nil), desk: '?' }
+struct UPath {
+  path : PurePath
+}
+
+///|
+pub(all) enum Path {
+  WinPath(WPath)
+  UnixPath(UPath)
+}
+
+///|
+pub fn path(str : String) -> PurePath {
+  Cons(str, Nil)
 }
 
 ///|
 fn op_add(self : Path, b : Path) -> Path {
-  { path: self.path.concat(b.path), desk: self.desk }
+  join(self, b)
 }
 
 ///|
 pub fn join(self : Path, b : Path) -> Path {
-  { path: self.path.concat(b.path), desk: self.desk }
+  match b {
+    WinPath(x) =>
+      match self {
+        WinPath(xs) => WinPath({ path: x.path.concat(xs.path), desk: x.desk })
+        UnixPath(xs) => WinPath({ path: x.path.concat(xs.path), desk: x.desk })
+      }
+    UnixPath(x) =>
+      match b {
+        UnixPath(xs) => UnixPath({ path: x.path.concat(xs.path) })
+        WinPath(xs) => UnixPath({ path: x.path.concat(xs.path) })
+      }
+  }
 }
 
 ///|
 pub fn parent(self : Path) -> Path {
-  match self.path {
-    Nil => self
-    Cons(_, xs) => { path: xs, desk: self.desk }
+  match self {
+    WinPath(x) =>
+      WinPath({
+        path: match x.path {
+          Nil => Nil
+          Cons(_, rest) => rest
+        },
+        desk: x.desk,
+      })
+    UnixPath(x) =>
+      UnixPath({
+        path: match x.path {
+          Nil => Nil
+          Cons(_, rest) => rest
+        },
+      })
   }
 }
 
@@ -39,17 +75,25 @@ pub fn to_path(str : Array[String]) -> PurePath {
 
 ///|
 pub fn unix_path(path : Path) -> String {
-  loop path.path, "" {
-    Nil, str => break str
-    Cons(str, rest), other => continue rest, "/\{str}\{other}"
+  match path {
+    UnixPath(x) =>
+      loop x.path, "" {
+        Nil, str => break str
+        Cons(str, rest), other => continue rest, "/\{str}\{other}"
+      }
+    _ => ""
   }
 }
 
 ///|
 pub fn win_path(path : Path) -> String {
-  loop path.path, "" {
-    Nil, str => break "\{path.desk}:\{str}"
-    Cons(str, rest), other => continue rest, "\\\{str}\{other}"
+  match path {
+    WinPath(x) =>
+      loop x.path, "" {
+        Nil, str => break "\{x.desk}:\{str}"
+        Cons(str, rest), other => continue rest, "\\\{str}\{other}"
+      }
+    _ => ""
   }
 }
 
@@ -57,9 +101,9 @@ pub fn win_path(path : Path) -> String {
 fn main {
   let arr = ["abc", "cde", "333"]
   let arr2 = ["abcc", "cded", "3333"]
-  let l : Path = { path: to_path(arr), desk: 'D' }
-  let ll : Path = { path: to_path(arr2), desk: 'D' }
+  let l : Path = WinPath({ path: to_path(arr), desk: "D" })
+  let ll : Path = WinPath({ path: to_path(arr2), desk: "D" })
   println(win_path(l))
-  println(win_path(ll))
-  println(unix_path(l + ll))
+  println(win_path(ll.parent()))
+  println(win_path((l + ll).parent()))
 }
