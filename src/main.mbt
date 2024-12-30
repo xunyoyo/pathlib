@@ -12,7 +12,7 @@ struct Path {
 
 ///|
 pub fn path(str : String) -> Path {
-  {path : Cons(str, Nil), desk : '?'}
+  { path: Cons(str, Nil), desk: '?' }
 }
 
 ///|
@@ -46,13 +46,13 @@ pub fn join(self : Path, b : Path) -> Path {
 pub fn parent(self : Path) -> Path {
   match self.path {
     Nil => self
-    Cons(x, xs) => { path: xs, desk: self.desk }
+    Cons(_, xs) => { path: xs, desk: self.desk }
   }
 }
 
 ///|
-pub fn to_path(str: Array[String]) -> PurePath {
-  loop str.length(), Nil {
+pub fn to_path(str : Array[String]) -> PurePath {
+  loop str.length() - 1, Nil {
     -1, acc => break acc
     i, acc => continue i - 1, Cons(str[i], acc)
   }
