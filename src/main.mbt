@@ -1,8 +1,4 @@
-///|
-enum PurePath {
-  Cons(String, PurePath)
-  Nil
-}
+typealias PurePath=@immut/list.T[String]
 
 ///|
 struct Path {
@@ -16,30 +12,13 @@ pub fn path(str : String) -> Path {
 }
 
 ///|
-fn reverse(path : PurePath) -> PurePath {
-  loop path, Nil {
-    Nil, acc => break acc
-    Cons(str, rest), acc => continue rest, Cons(str, acc)
-  }
-}
-
-///|
-fn concat_path(a : PurePath, b : PurePath) -> PurePath {
-  let reversed_b = reverse(b)
-  loop reversed_b, a {
-    Nil, acc => break acc
-    Cons(str, rest), acc => continue rest, Cons(str, acc)
-  }
-}
-
-///|
 fn op_add(self : Path, b : Path) -> Path {
-  { path: concat_path(self.path, b.path), desk: self.desk }
+  { path: self.path.concat(b.path), desk: self.desk }
 }
 
 ///|
 pub fn join(self : Path, b : Path) -> Path {
-  { path: concat_path(self.path, b.path), desk: self.desk }
+  { path: self.path.concat(b.path), desk: self.desk }
 }
 
 ///|
@@ -52,7 +31,7 @@ pub fn parent(self : Path) -> Path {
 
 ///|
 pub fn to_path(str : Array[String]) -> PurePath {
-  loop str.length() - 1, Nil {
+  loop str.length() - 1, PurePath::Nil {
     -1, acc => break acc
     i, acc => continue i - 1, Cons(str[i], acc)
   }
