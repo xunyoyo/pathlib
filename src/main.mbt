@@ -12,7 +12,7 @@ struct Path {
 
 ///|
 pub fn path(str : String) -> Path {
-
+  {path : Cons(str, Nil), desk : '?'}
 }
 
 ///|
