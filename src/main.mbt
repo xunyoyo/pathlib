@@ -184,13 +184,43 @@ pub fn file_stem(self : Path) -> String {
 }
 
 ///|
+pub fn file_prefix(self : Path) -> String {
+  match self {
+    WinPath(x) =>
+      match x.path {
+        Nil => ""
+        Cons(file, _) => {
+          let idx = file.last_index_of(".")
+          if idx == -1 {
+            file
+          } else {
+            file.substring(start=0, end=idx)
+          }
+        }
+      }
+    UnixPath(x) =>
+      match x.path {
+        Nil => ""
+        Cons(file, _) => {
+          let idx = file.last_index_of(".")
+          if idx == -1 {
+            file
+          } else {
+            file.substring(start=0, end=idx)
+          }
+        }
+      }
+  }
+}
+
+///|
 pub fn extension(self : Path) -> String {
   match self {
     WinPath(x) =>
       match x.path {
         Nil => ""
         Cons(file, _) => {
-          let idx = file.index_of(".")
+          let idx = file.last_index_of(".")
           if idx == -1 {
             ""
           } else {
@@ -202,7 +232,7 @@ pub fn extension(self : Path) -> String {
       match x.path {
         Nil => ""
         Cons(file, _) => {
-          let idx = file.index_of(".")
+          let idx = file.last_index_of(".")
           if idx == -1 {
             ""
           } else {
@@ -214,16 +244,15 @@ pub fn extension(self : Path) -> String {
 }
 
 test "path slice" {
-  let arr = ["abc", "cde", "333.txt"]
+  let arr = ["abc", "cde", "333.tar.gz"]
   let arr2 = ["abc", "cde", "333"]
   let l : Path = WinPath({ path: to_path(arr), disk: 'D' })
   let ll : Path = WinPath({ path: to_path(arr2), disk: 'D' })
-  println(win_path(l))
-  println(l.file_stem())
-  println(l.extension())
-  println(win_path(ll))
-  println(ll.file_stem())
-  println(ll.extension())
+  inspect!(l.file_stem(), content="333")
+  inspect!(l.file_prefix(), content="333.tar")
+  inspect!(l.extension(), content="gz")
+  inspect!(ll.file_stem(), content="333")
+  inspect!(ll.extension(), content="")
 }
 
 ///|
@@ -359,4 +388,242 @@ test "has_root/special_cases" {
     WinPath({ path: @immut/list.T::of(["", "temp"]), disk: '?' }).has_root(),
     content="true",
   )
+}
+
+///|
+/// Determines whether base is a prefix of self.
+/// Only considers whole path components to match.
+pub fn starts_with(self : Path, base : Path) -> Bool {
+  match (self, base) {
+    (WinPath(x), WinPath(y)) =>
+      // For Windows paths, check disk letter and path components
+      if x.disk != y.disk {
+        false
+      } else {
+        // Convert paths to lists for comparison
+        let self_parts = x.path
+        let base_parts = y.path
+
+        // Compare each component
+        loop (self_parts, base_parts) {
+          (_, Nil) => true // base is exhausted, it's a prefix
+          (Nil, _) => false // self is exhausted but base isn't
+          (Cons(s, srest), Cons(b, brest)) =>
+            if s != b {
+              false
+            } else {
+              continue (srest, brest)
+            }
+        }
+      }
+    (UnixPath(x), UnixPath(y)) => {
+      // For Unix paths, just check path components
+      let self_parts = x.path
+      let base_parts = y.path
+
+      // Compare each component
+      loop (self_parts, base_parts) {
+        (_, Nil) => true // base is exhausted, it's a prefix
+        (Nil, _) => false // self is exhausted but base isn't
+        (Cons(s, srest), Cons(b, brest)) =>
+          if s != b {
+            false
+          } else {
+            continue (srest, brest)
+          }
+      }
+    }
+    _ => false // Different path types can't be prefixes of each other
+  }
+}
+
+test "starts_with/windows" {
+  // Test Windows paths with same disk and matching prefix
+  let base = WinPath({ disk: 'C', path: @immut/list.T::of(["Windows"]) })
+  let base2 = WinPath({
+    disk: 'C',
+    path: @immut/list.T::of(["Windows", "System32"]),
+  })
+  let path = WinPath({
+    disk: 'C',
+    path: @immut/list.T::of(["Windows", "System32"]),
+  })
+  inspect!(path.starts_with(base), content="true")
+  inspect!(path.starts_with(base2), content="true")
+
+  // Test Windows paths with different disks but same path
+  let other_disk = WinPath({ disk: 'D', path: @immut/list.T::of(["Windows"]) })
+  inspect!(path.starts_with(other_disk), content="false")
+}
+
+test "starts_with/unix" {
+  // Test Unix paths with matching prefix
+  let base = UnixPath({ path: @immut/list.T::of(["usr", "bin"]) })
+  let base2 = UnixPath({ path: @immut/list.T::of(["bin"]) })
+  let path = UnixPath({ path: @immut/list.T::of(["usr", "bin", "python"]) })
+  inspect!(path.starts_with(base), content="true")
+  inspect!(path.starts_with(base2), content="false")
+
+  // Test Unix paths with different prefixes
+  let different = UnixPath({ path: @immut/list.T::of(["usr", "local"]) })
+  inspect!(path.starts_with(different), content="false")
+}
+
+test "starts_with/cross_type" {
+  // Test mixing Windows and Unix paths
+  let win = WinPath({ disk: 'C', path: @immut/list.T::of(["Users"]) })
+  let unix = UnixPath({ path: @immut/list.T::of(["Users"]) })
+  inspect!(win.starts_with(unix), content="false")
+  inspect!(unix.starts_with(win), content="false")
+
+  // Test empty paths
+  let empty_win = WinPath({ disk: 'C', path: @immut/list.T::Nil })
+  let empty_unix = UnixPath({ path: @immut/list.T::Nil })
+  inspect!(empty_win.starts_with(empty_unix), content="false")
+}
+
+///|
+/// Determines whether child is a suffix of self.
+/// Only considers whole path components to match.
+pub fn ends_with(self : Path, child : Path) -> Bool {
+  match (self, child) {
+    (WinPath(x), WinPath(y)) =>
+      // For Windows paths, check disk letter and path components
+      if x.disk != y.disk {
+        false
+      } else {
+        // Convert paths to lists for comparison
+        let self_parts = x.path
+        let child_parts = y.path
+
+        // Get lengths for comparison
+        let self_len = loop self_parts, 0 {
+          Nil, acc => break acc
+          Cons(_, rest), acc => continue rest, acc + 1
+        }
+        let child_len = loop child_parts, 0 {
+          Nil, acc => break acc
+          Cons(_, rest), acc => continue rest, acc + 1
+        }
+        if child_len > self_len {
+          false
+        } else {
+          // Skip the non-matching prefix of self
+          let skip = self_len - child_len
+          let mut trimmed = self_parts
+          for i = 0; i < skip; i = i + 1 {
+            match trimmed {
+              Cons(_, rest) => trimmed = rest
+              Nil => ()
+            }
+          }
+
+          // Compare remaining components
+          loop (trimmed, child_parts) {
+            (Nil, Nil) => true
+            (Cons(s, srest), Cons(c, crest)) =>
+              if s != c {
+                false
+              } else {
+                continue (srest, crest)
+              }
+            _ => false
+          }
+        }
+      }
+    (UnixPath(x), UnixPath(y)) => {
+      // For Unix paths, just check path components
+      let self_parts = x.path
+      let child_parts = y.path
+
+      // Get lengths for comparison
+      let self_len = loop self_parts, 0 {
+        Nil, acc => break acc
+        Cons(_, rest), acc => continue rest, acc + 1
+      }
+      let child_len = loop child_parts, 0 {
+        Nil, acc => break acc
+        Cons(_, rest), acc => continue rest, acc + 1
+      }
+      if child_len > self_len {
+        false
+      } else {
+        // Skip the non-matching prefix of self
+        let skip = self_len - child_len
+        let mut trimmed = self_parts
+        for i = 0; i < skip; i = i + 1 {
+          match trimmed {
+            Cons(_, rest) => trimmed = rest
+            Nil => ()
+          }
+        }
+
+        // Compare remaining components
+        loop (trimmed, child_parts) {
+          (Nil, Nil) => true
+          (Cons(s, srest), Cons(c, crest)) =>
+            if s != c {
+              false
+            } else {
+              continue (srest, crest)
+            }
+          _ => false
+        }
+      }
+    }
+    _ => false // Different path types can't be suffixes of each other
+  }
+}
+
+test "ends_with/windows" {
+  // Test full path suffix matching
+  let path = WinPath({
+    disk: 'C',
+    path: @immut/list.T::of(["Users", "Documents", "file.txt"]),
+  })
+  let suffix = WinPath({
+    disk: 'C',
+    path: @immut/list.T::of(["Documents", "file.txt"]),
+  })
+  inspect!(path.ends_with(suffix), content="true")
+
+  // Test different disk letters
+  let diff_disk = WinPath({
+    disk: 'D',
+    path: @immut/list.T::of(["Documents", "file.txt"]),
+  })
+  inspect!(path.ends_with(diff_disk), content="false")
+
+  // Test empty paths
+  let empty = WinPath({ disk: 'C', path: @immut/list.T::Nil })
+  inspect!(path.ends_with(empty), content="true")
+}
+
+test "ends_with/unix" {
+  // Test path suffix matching with root
+  let path = UnixPath({ path: @immut/list.T::of(["", "usr", "local", "bin"]) })
+  let suffix = UnixPath({ path: @immut/list.T::of(["local", "bin"]) })
+  inspect!(path.ends_with(suffix), content="true")
+
+  // Test longer suffix than path
+  let longer = UnixPath({
+    path: @immut/list.T::of(["opt", "usr", "local", "bin"]),
+  })
+  inspect!(path.ends_with(longer), content="false")
+
+  // Test empty suffix
+  let empty = UnixPath({ path: @immut/list.T::Nil })
+  inspect!(path.ends_with(empty), content="true")
+}
+
+test "ends_with/cross_type" {
+  let win_path = WinPath({
+    disk: 'C',
+    path: @immut/list.T::of(["Users", "Documents"]),
+  })
+  let unix_path = UnixPath({ path: @immut/list.T::of(["Users", "Documents"]) })
+
+  // Test mixing path types
+  inspect!(win_path.ends_with(unix_path), content="false")
+  inspect!(unix_path.ends_with(win_path), content="false")
 }
