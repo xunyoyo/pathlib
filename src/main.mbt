@@ -154,6 +154,22 @@ test "match path" {
 }
 
 ///|
+pub fn file_name(self : Path) -> String {
+  match self {
+    WinPath(x) =>
+      match x.path {
+        Nil => ""
+        Cons(file, _) => file
+      }
+    UnixPath(x) =>
+      match x.path {
+        Nil => ""
+        Cons(file, _) => file
+      }
+  }
+}
+
+///|
 pub fn file_stem(self : Path) -> String {
   match self {
     WinPath(x) =>
@@ -248,9 +264,11 @@ test "path slice" {
   let arr2 = ["abc", "cde", "333"]
   let l : Path = WinPath({ path: to_path(arr), disk: 'D' })
   let ll : Path = WinPath({ path: to_path(arr2), disk: 'D' })
+  inspect!(l.file_name(), content="333.tar.gz")
   inspect!(l.file_stem(), content="333")
   inspect!(l.file_prefix(), content="333.tar")
   inspect!(l.extension(), content="gz")
+  inspect!(ll.file_name(), content="333")
   inspect!(ll.file_stem(), content="333")
   inspect!(ll.extension(), content="")
 }
@@ -275,6 +293,11 @@ pub fn is_absolute(self : Path) -> Bool {
         Cons(first, _) => x.disk != '?' && first == ""
       }
   }
+}
+
+///|
+pub fn is_relative(self : Path) -> Bool {
+  return not(self.is_absolute())
 }
 
 test "is_absolute/unix" {
@@ -626,4 +649,223 @@ test "ends_with/cross_type" {
   // Test mixing path types
   inspect!(win_path.ends_with(unix_path), content="false")
   inspect!(unix_path.ends_with(win_path), content="false")
+}
+
+///|
+pub fn with_file_name(self : Path, name : String) -> Path {
+  match self {
+    WinPath(x) =>
+      match x.path {
+        Nil => WinPath({ path: @immut/list.T::of([name]), disk: x.disk })
+        Cons(_, rest) => WinPath({ path: Cons(name, rest), disk: x.disk })
+      }
+    UnixPath(x) =>
+      match x.path {
+        Nil => UnixPath({ path: @immut/list.T::of([name]) })
+        Cons(_, rest) => UnixPath({ path: Cons(name, rest) })
+      }
+  }
+}
+
+test "with_file_name/windows" {
+  // Normal case with multiple components
+  let winpath = WinPath({
+    disk: 'C',
+    path: to_path(["Users", "Documents", "old.txt"]),
+  })
+  inspect!(
+    win_path(winpath.with_file_name("new.txt")),
+    content="C:\\Users\\Documents\\new.txt",
+  )
+
+  // Empty path case
+  let empty_win = WinPath({ disk: 'D', path: @immut/list.T::Nil })
+  inspect!(
+    win_path(empty_win.with_file_name("file.txt")),
+    content="D:\\file.txt",
+  )
+}
+
+test "with_file_name/unix" {
+  // Normal case with multiple components
+  let unixpath = UnixPath({ path: to_path(["home", "user", "doc.txt"]) })
+  inspect!(
+    unix_path(unixpath.with_file_name("new.txt")),
+    content="/home/user/new.txt",
+  )
+
+  // Empty path case
+  let empty_unix = UnixPath({ path: @immut/list.T::Nil })
+  inspect!(
+    unix_path(empty_unix.with_file_name("file.txt")),
+    content="/file.txt",
+  )
+}
+
+test "with_file_name/special_chars" {
+  // Test with special characters in filename
+  let path = WinPath({
+    disk: 'C',
+    path: to_path(["Users", "Documents", "old.txt"]),
+  })
+  inspect!(
+    win_path(path.with_file_name("file with spaces.txt")),
+    content="C:\\Users\\Documents\\file with spaces.txt",
+  )
+  inspect!(
+    win_path(path.with_file_name("file#1.txt")),
+    content="C:\\Users\\Documents\\file#1.txt",
+  )
+}
+
+///|
+pub fn with_extension(self : Path, extension : String) -> Path {
+  match self {
+    WinPath(x) =>
+      match x.path {
+        Nil => self
+        Cons(file, rest) => {
+          let idx = file.last_index_of(".")
+          if idx == -1 {
+            // No extension - add new one if provided
+            if extension == "" {
+              self
+            } else {
+              WinPath({ path: Cons("\{file}.\{extension}", rest), disk: x.disk })
+            }
+          } else {
+            // Has extension - replace with new one
+            let base = file.substring(start=0, end=idx)
+            if extension == "" {
+              WinPath({ path: Cons(base, rest), disk: x.disk })
+            } else {
+              WinPath({ path: Cons("\{base}.\{extension}", rest), disk: x.disk })
+            }
+          }
+        }
+      }
+    UnixPath(x) =>
+      match x.path {
+        Nil => self
+        Cons(file, rest) => {
+          let idx = file.last_index_of(".")
+          if idx == -1 {
+            // No extension - add new one if provided
+            if extension == "" {
+              self
+            } else {
+              UnixPath({ path: Cons("\{file}.\{extension}", rest) })
+            }
+          } else {
+            // Has extension - replace with new one
+            let base = file.substring(start=0, end=idx)
+            if extension == "" {
+              UnixPath({ path: Cons(base, rest) })
+            } else {
+              UnixPath({ path: Cons("\{base}.\{extension}", rest) })
+            }
+          }
+        }
+      }
+  }
+}
+
+test "with_extension/basic" {
+  // Test basic extension replacement for both Windows and Unix paths
+  let winpath = WinPath({ disk: 'C', path: to_path(["Users", "file.txt"]) })
+  let unixpath = UnixPath({ path: to_path(["home", "file.txt"]) })
+  inspect!(
+    win_path(winpath.with_extension("doc")),
+    content="C:\\Users\\file.doc",
+  )
+  inspect!(unix_path(unixpath.with_extension("doc")), content="/home/file.doc")
+}
+
+test "with_extension/empty" {
+  // Test with empty extension and no extension
+  let winpath = WinPath({ disk: 'C', path: to_path(["Users", "file.txt"]) })
+  let win_no_ext = WinPath({ disk: 'C', path: to_path(["Users", "file"]) })
+  inspect!(win_path(winpath.with_extension("")), content="C:\\Users\\file")
+  inspect!(win_path(win_no_ext.with_extension("")), content="C:\\Users\\file")
+}
+
+test "with_extension/multiple_dots" {
+  // Test with multiple dots in filename
+  let winpath = WinPath({ disk: 'C', path: to_path(["Users", "file.tar.gz"]) })
+  let unixpath = UnixPath({ path: to_path(["home", "file.tar.gz"]) })
+  inspect!(
+    win_path(winpath.with_extension("xz")),
+    content="C:\\Users\\file.tar.xz",
+  )
+  inspect!(
+    unix_path(unixpath.with_extension("xz")),
+    content="/home/file.tar.xz",
+  )
+}
+
+///|
+pub fn with_added_extension(self : Path, extension : String) -> Path {
+  match self {
+    WinPath(x) =>
+      match x.path {
+        Nil => self
+        Cons(file, rest) =>
+          if extension == "" {
+            self
+          } else {
+            WinPath({ path: Cons("\{file}.\{extension}", rest), disk: x.disk })
+          }
+      }
+    UnixPath(x) =>
+      match x.path {
+        Nil => self
+        Cons(file, rest) =>
+          if extension == "" {
+            self
+          } else {
+            UnixPath({ path: Cons("\{file}.\{extension}", rest) })
+          }
+      }
+  }
+}
+
+test "with_added_extension/basic" {
+  // Test basic extension addition for both Windows and Unix paths
+  let winpath = WinPath({ disk: 'C', path: to_path(["Users", "file"]) })
+  let unixpath = UnixPath({ path: to_path(["home", "file"]) })
+  inspect!(
+    win_path(winpath.with_added_extension("txt")),
+    content="C:\\Users\\file.txt",
+  )
+  inspect!(
+    unix_path(unixpath.with_added_extension("txt")),
+    content="/home/file.txt",
+  )
+}
+
+test "with_added_extension/empty" {
+  // Test with empty extension
+  let winpath = WinPath({ disk: 'C', path: to_path(["Users", "file"]) })
+  let unixpath = UnixPath({ path: to_path(["home", "file"]) })
+
+  // Empty extension should return original path
+  inspect!(
+    win_path(winpath.with_added_extension("")),
+    content="C:\\Users\\file",
+  )
+  inspect!(unix_path(unixpath.with_added_extension("")), content="/home/file")
+}
+
+test "with_added_extension/existing_extension" {
+  // Test adding extension to files that already have extensions
+  let winpath = WinPath({ disk: 'C', path: to_path(["Users", "file.txt"]) })
+  let unixpath = UnixPath({ path: to_path(["home", "file.txt"]) })
+  inspect!(
+    win_path(winpath.with_added_extension("gz")),
+    content="C:\\Users\\file.txt.gz",
+  )
+  inspect!(
+    unix_path(unixpath.with_added_extension("gz")),
+    content="/home/file.txt.gz",
+  )
 }
