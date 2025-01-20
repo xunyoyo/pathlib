@@ -1253,6 +1253,32 @@ test "with_added_extension/existing_extension" {
 type! PrefixError String
 
 ///|
+/// Removes a prefix from a path, returning the path relative to the prefix. The
+/// operation preserves the path type and, for Windows paths, the disk letter of
+/// the original path.
+///
+/// Parameters:
+///
+/// * `path` : The path from which to remove the prefix.
+/// * `prefix` : The prefix path to remove. Must be of the same type (Unix or
+/// Windows) as the path.
+///
+/// Returns a new path with the prefix removed.
+///
+/// Throws a `PrefixError` if:
+///
+/// * The prefix is not actually a prefix of the path
+/// * The path and prefix are of different types (Unix vs Windows)
+///
+/// Example:
+///
+/// ```moonbit
+/// test "strip_prefix" {
+///   let path = UnixPath({ path: to_path(["usr", "local", "bin"]) })
+///   let prefix = UnixPath({ path: to_path(["usr", "local"]) })
+///   inspect!(strip_prefix!(path, prefix).unix_path(), content="/bin")
+/// }
+/// ```
 pub fn strip_prefix(self : Path, base : Path) -> Path!PrefixError {
   // First check if base is a prefix
   if not(self.starts_with(base)) {
