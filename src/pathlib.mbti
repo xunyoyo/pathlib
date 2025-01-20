@@ -1,0 +1,44 @@
+package xunyoyo/pathlib
+
+alias @moonbitlang/core/immut/list as @list
+alias @moonbitlang/core/strconv as @strconv
+
+// Values
+fn path(String) -> Path!@strconv.StrConvError
+
+fn to_path(Array[String]) -> @list.T[String]
+
+fn unix_path(Path) -> String
+
+fn win_path(Path) -> String
+
+// Types and methods
+pub(all) enum Path {
+  WinPath(WPath)
+  UnixPath(UPath)
+}
+impl Path {
+  ends_with(Self, Self) -> Bool
+  extension(Self) -> String
+  file_name(Self) -> String
+  file_prefix(Self) -> String
+  file_stem(Self) -> String
+  has_root(Self) -> Bool
+  is_absolute(Self) -> Bool
+  is_relative(Self) -> Bool
+  join(Self, Self) -> Self
+  parent(Self) -> Self
+  starts_with(Self, Self) -> Bool
+  with_added_extension(Self, String) -> Self
+  with_extension(Self, String) -> Self
+  with_file_name(Self, String) -> Self
+}
+
+type UPath
+
+type WPath
+
+// Type aliases
+
+// Traits
+
