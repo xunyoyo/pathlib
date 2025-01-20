@@ -346,4 +346,4 @@ Contributions are welcome! Please open an issue or submit a pull request.
 
 ## Contact
 
-For any questions or suggestions, please contact [1279416582@qq.com] and [2214559347@qq.com].
+For any questions or suggestions, please contact [1279416582@qq.com].
