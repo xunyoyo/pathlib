@@ -729,8 +729,8 @@ pub fn Path::starts_with(self : Path, base : Path) -> Bool {
         false
       } else {
         // Convert paths to lists for comparison
-        let self_parts = x.path
-        let base_parts = y.path
+        let self_parts = x.path.rev()
+        let base_parts = y.path.rev()
         // Compare each component
         loop (self_parts, base_parts) {
           (_, Nil) => true // base is exhausted, it's a prefix
@@ -745,8 +745,8 @@ pub fn Path::starts_with(self : Path, base : Path) -> Bool {
       }
     (UnixPath(x), UnixPath(y)) => {
       // For Unix paths, just check path components
-      let self_parts = x.path
-      let base_parts = y.path
+      let self_parts = x.path.rev()
+      let base_parts = y.path.rev()
       // Compare each component
       loop (self_parts, base_parts) {
         (_, Nil) => true // base is exhausted, it's a prefix
@@ -765,40 +765,34 @@ pub fn Path::starts_with(self : Path, base : Path) -> Bool {
 
 test "starts_with/windows" {
   // Test Windows paths with same disk and matching prefix
-  let base = WinPath({ disk: 'C', path: @immut/list.of(["Windows"]) })
-  let base2 = WinPath({
-    disk: 'C',
-    path: @immut/list.of(["Windows", "System32"]),
-  })
-  let path = WinPath({
-    disk: 'C',
-    path: @immut/list.of(["Windows", "System32"]),
-  })
+  let base = WinPath({ disk: 'C', path: to_path(["Windows"]) })
+  let base2 = WinPath({ disk: 'C', path: to_path(["Windows", "System32"]) })
+  let path = WinPath({ disk: 'C', path: to_path(["Windows", "System32"]) })
   inspect!(path.starts_with(base), content="true")
   inspect!(path.starts_with(base2), content="true")
 
   // Test Windows paths with different disks but same path
-  let other_disk = WinPath({ disk: 'D', path: @immut/list.of(["Windows"]) })
+  let other_disk = WinPath({ disk: 'D', path: to_path(["Windows"]) })
   inspect!(path.starts_with(other_disk), content="false")
 }
 
 test "starts_with/unix" {
   // Test Unix paths with matching prefix
-  let base = UnixPath({ path: @immut/list.of(["usr", "bin"]) })
-  let base2 = UnixPath({ path: @immut/list.of(["bin"]) })
-  let path = UnixPath({ path: @immut/list.of(["usr", "bin", "python"]) })
+  let base = UnixPath({ path: to_path(["usr", "bin"]) })
+  let base2 = UnixPath({ path: to_path(["bin"]) })
+  let path = UnixPath({ path: to_path(["usr", "bin", "python"]) })
   inspect!(path.starts_with(base), content="true")
   inspect!(path.starts_with(base2), content="false")
 
   // Test Unix paths with different prefixes
-  let different = UnixPath({ path: @immut/list.of(["usr", "local"]) })
+  let different = UnixPath({ path: to_path(["usr", "local"]) })
   inspect!(path.starts_with(different), content="false")
 }
 
 test "starts_with/cross_type" {
   // Test mixing Windows and Unix paths
-  let win = WinPath({ disk: 'C', path: @immut/list.of(["Users"]) })
-  let unix = UnixPath({ path: @immut/list.of(["Users"]) })
+  let win = WinPath({ disk: 'C', path: to_path(["Users"]) })
+  let unix = UnixPath({ path: to_path(["Users"]) })
   inspect!(win.starts_with(unix), content="false")
   inspect!(unix.starts_with(win), content="false")
 
@@ -1253,4 +1247,105 @@ test "with_added_extension/existing_extension" {
     unixpath.with_added_extension("gz").unix_path(),
     content="/home/file.txt.gz",
   )
+}
+
+///|
+type! PrefixError String
+
+///|
+pub fn strip_prefix(self : Path, base : Path) -> Path!PrefixError {
+  // First check if base is a prefix
+  if not(self.starts_with(base)) {
+    raise PrefixError("Base path is not a prefix of the path")
+  }
+  match (self, base) {
+    (WinPath(x), WinPath(y)) => {
+      // Get lengths
+      let xx = x.path.rev()
+      let yy = y.path.rev()
+      let self_len = loop xx, 0 {
+        Nil, acc => break acc
+        Cons(_, rest), acc => continue rest, acc + 1
+      }
+      let base_len = loop yy, 0 {
+        Nil, acc => break acc
+        Cons(_, rest), acc => continue rest, acc + 1
+      }
+
+      // Skip prefix components
+      let mut remaining = xx
+      for i = 0; i < base_len; i = i + 1 {
+        match remaining {
+          Cons(_, rest) => remaining = rest
+          Nil => ()
+        }
+      }
+
+      // Return new path with same disk letter
+      WinPath({ path: remaining.rev(), disk: x.disk })
+    }
+    (UnixPath(x), UnixPath(y)) => {
+      // Get lengths 
+      let xx = x.path.rev()
+      let yy = y.path.rev()
+      let self_len = loop xx, 0 {
+        Nil, acc => break acc
+        Cons(_, rest), acc => continue rest, acc + 1
+      }
+      let base_len = loop yy, 0 {
+        Nil, acc => break acc
+        Cons(_, rest), acc => continue rest, acc + 1
+      }
+
+      // Skip prefix components
+      let mut remaining = xx
+      for i = 0; i < base_len; i = i + 1 {
+        match remaining {
+          Cons(_, rest) => remaining = rest
+          Nil => ()
+        }
+      }
+
+      // Return new Unix path
+      UnixPath({ path: remaining.rev() })
+    }
+    _ => raise PrefixError("Cannot strip prefix of different path types")
+  }
+}
+
+test "strip_prefix/unix" {
+  // Test stripping Unix paths
+  let path = UnixPath({ path: to_path(["usr", "local", "bin"]) })
+  let base = UnixPath({ path: to_path(["usr", "local"]) })
+  //println(strip_prefix!(path, base).unix_path())
+  inspect!(strip_prefix!(path, base).unix_path(), content="/bin")
+
+  // Test with empty base path
+  let empty_base = UnixPath({ path: @immut/list.T::Nil })
+  //println(strip_prefix!(path, empty_base).unix_path())
+  inspect!(
+    strip_prefix!(path, empty_base).unix_path(),
+    content="/usr/local/bin",
+  )
+}
+
+test "strip_prefix/windows" {
+  // Test stripping Windows paths with same disk
+  let path = WinPath({ disk: 'C', path: to_path(["Users", "Admin", "Desktop"]) })
+  let base = WinPath({ disk: 'C', path: to_path(["Users", "Admin"]) })
+  inspect!(strip_prefix!(path, base).win_path(), content="C:\\Desktop")
+}
+
+test "panic strip_prefix/invalid" {
+  // Test different path types
+  let unix = UnixPath({ path: to_path(["usr", "bin"]) })
+  let win = WinPath({ disk: 'C', path: to_path(["Windows"]) })
+
+  // Should panic when trying to strip different path types
+  let _ = strip_prefix!(unix, win)
+
+  // Should panic when base is not a prefix
+  let non_prefix = UnixPath({ path: to_path(["var"]) })
+  let _ = strip_prefix!(unix, non_prefix)
+
 }
