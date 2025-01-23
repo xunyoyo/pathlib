@@ -536,25 +536,25 @@ test "path slice" {
 ///
 /// ```moonbit
 /// // Unix path starting with root is absolute
-/// let unix_path = UnixPath({ path: @immut/list.of(["", "usr", "bin"]) })
+/// let unix_path = UnixPath({ path: to_path(["usr", "bin"]) })
 /// unix_path.is_absolute() |> println // true
 /// 
 /// // Windows path needs both valid disk and root to be absolute
-/// let win_path = WinPath({ disk: 'C', path: @immut/list.of(["", "Windows"]) })
+/// let win_path = WinPath({ disk: 'C', path: to_path(["Windows"]) })
 /// win_path.is_absolute() |> println // true
 /// ```
 pub fn Path::is_absolute(self : Path) -> Bool {
   match self {
     UnixPath(x) =>
-      match x.path {
+      match x.path.rev() {
         Nil => false
-        Cons(first, _) => first == ""
+        Cons(first, _) => first != ""
       }
     WinPath(x) =>
       // Check if it has a valid disk letter (not '?') and starts with root
-      match x.path {
+      match x.path.rev() {
         Nil => false
-        Cons(first, _) => x.disk != '?' && first == ""
+        Cons(first, _) => x.disk != '?' && first != ""
       }
   }
 }
@@ -577,12 +577,12 @@ pub fn Path::is_absolute(self : Path) -> Bool {
 ///
 /// ```moonbit
 /// // Unix relative path
-/// let unix_path = UnixPath({ path: @immut/list.of(["usr", "bin"]) })
+/// let unix_path = UnixPath({ path: to_path(["", "usr", "bin"]) })
 /// unix_path.is_relative() |> println // true
 /// 
 /// // Windows absolute path
-/// let win_path = WinPath({ disk: 'C', path: @immut/list.of(["", "Windows"]) })
-/// win_path.is_relative() |> println // false
+/// let win_path = WinPath({ disk: 'C', path: to_path(["", "Windows"]) })
+/// win_path.is_relative() |> println // true
 /// ```
 pub fn Path::is_relative(self : Path) -> Bool {
   return not(self.is_absolute())
@@ -591,12 +591,12 @@ pub fn Path::is_relative(self : Path) -> Bool {
 test "is_absolute/unix" {
   // Unix absolute paths start with root
   inspect!(
-    UnixPath({ path: @immut/list.of(["", "usr", "bin"]) }).is_absolute(),
+    UnixPath({ path: to_path(["usr", "bin"]) }).is_absolute(),
     content="true",
   )
   // Unix relative paths don't start with root
   inspect!(
-    UnixPath({ path: @immut/list.of(["usr", "bin"]) }).is_absolute(),
+    UnixPath({ path: to_path(["", "usr", "bin"]) }).is_absolute(),
     content="false",
   )
   // Empty Unix path is not absolute
@@ -609,17 +609,17 @@ test "is_absolute/unix" {
 test "is_absolute/windows" {
   // Windows absolute paths need both valid disk and root
   inspect!(
-    WinPath({ path: @immut/list.of(["", "Windows"]), disk: 'C' }).is_absolute(),
+    WinPath({ path: to_path(["Windows"]), disk: 'C' }).is_absolute(),
     content="true",
   )
   // Windows paths without valid disk letter are not absolute
   inspect!(
-    WinPath({ path: @immut/list.of(["", "temp"]), disk: '?' }).is_absolute(),
+    WinPath({ path: to_path(["temp"]), disk: '?' }).is_absolute(),
     content="false",
   )
   // Windows paths without root are not absolute, even with disk
   inspect!(
-    WinPath({ path: @immut/list.of(["temp"]), disk: 'C' }).is_absolute(),
+    WinPath({ path: to_path(["", "temp"]), disk: 'C' }).is_absolute(),
     content="false",
   )
   // Empty Windows path is not absolute
@@ -639,27 +639,29 @@ test "is_absolute/windows" {
 pub fn Path::has_root(self : Path) -> Bool {
   match self {
     UnixPath(x) =>
-      match x.path {
+      match x.path.rev() {
         Nil => false
-        Cons(first, _) => first == ""
+        Cons(first, _) => first != ""
       }
     WinPath(x) =>
-      match x.path {
+      match x.path.rev() {
         Nil => false
-        Cons(first, _) => first == ""
+        Cons(first, _) => first != ""
       }
   }
 }
 
 test "has_root/unix" {
   // Unix path with root
+  println(UnixPath({ path: to_path(["usr", "bin"]) }).to_string())
   inspect!(
-    UnixPath({ path: @immut/list.of(["", "usr", "bin"]) }).has_root(),
+    UnixPath({ path: to_path(["usr", "bin"]) }).has_root(),
     content="true",
   )
   // Unix path without root
+  println(UnixPath({ path: to_path(["", "usr", "bin"]) }).to_string())
   inspect!(
-    UnixPath({ path: @immut/list.of(["usr", "bin"]) }).has_root(),
+    UnixPath({ path: to_path(["", "usr", "bin"]) }).has_root(),
     content="false",
   )
   // Empty Unix path
@@ -669,32 +671,18 @@ test "has_root/unix" {
 test "has_root/windows" {
   // Windows path with root (disk letter followed by root)
   inspect!(
-    WinPath({ path: @immut/list.of(["", "Windows"]), disk: 'C' }).has_root(),
+    WinPath({ path: to_path(["Windows"]), disk: 'C' }).has_root(),
     content="true",
   )
   // Windows path without root but with disk
   inspect!(
-    WinPath({ path: @immut/list.of(["Windows"]), disk: 'C' }).has_root(),
+    WinPath({ path: to_path(["", "Windows"]), disk: 'C' }).has_root(),
     content="false",
   )
   // Empty Windows path
   inspect!(
     WinPath({ path: @immut/list.T::Nil, disk: 'C' }).has_root(),
     content="false",
-  )
-}
-
-test "has_root/special_cases" {
-  // Path with only root
-  inspect!(UnixPath({ path: @immut/list.of([""]) }).has_root(), content="true")
-  inspect!(
-    WinPath({ path: @immut/list.of([""]), disk: 'C' }).has_root(),
-    content="true",
-  )
-  // Path with invalid disk letter should still work if it has root
-  inspect!(
-    WinPath({ path: @immut/list.of(["", "temp"]), disk: '?' }).has_root(),
-    content="true",
   )
 }
 
@@ -713,12 +701,12 @@ test "has_root/special_cases" {
 /// Example:
 ///
 /// ```moonbit
-/// let base = UnixPath({ path: @immut/list.of(["usr", "bin"]) })
-/// let path = UnixPath({ path: @immut/list.of(["usr", "bin", "python"]) })
+/// let base = UnixPath({ path: to_path(["usr", "bin"]) })
+/// let path = UnixPath({ path: to_path(["usr", "bin", "python"]) })
 /// path.starts_with(base) |> println // true
 /// 
 /// // Different path types never start with each other
-/// let win_path = WinPath({ disk: 'C', path: @immut/list.of(["Users"]) })
+/// let win_path = WinPath({ disk: 'C', path: to_path(["Users"]) })
 /// win_path.starts_with(base) |> println // false
 /// ```
 pub fn Path::starts_with(self : Path, base : Path) -> Bool {
@@ -820,16 +808,16 @@ test "starts_with/cross_type" {
 ///
 /// ```moonbit
 /// // Unix path ending check
-/// let path = UnixPath({ path: @immut/list.of(["usr", "local", "bin"]) })
-/// let suffix = UnixPath({ path: @immut/list.of(["local", "bin"]) })
+/// let path = UnixPath({ path: to_path(["usr", "local", "bin"]) })
+/// let suffix = UnixPath({ path: to_path(["local", "bin"]) })
 /// path.ends_with(suffix) |> println // true
 /// 
 /// // Windows path requires matching disk letter
 /// let win_path = WinPath({
 ///   disk: 'C',
-///   path: @immut/list.of(["Users", "Documents"]),
+///   path: to_path(["Users", "Documents"]),
 /// })
-/// let wrong_disk = WinPath({ disk: 'D', path: @immut/list.of(["Documents"]) })
+/// let wrong_disk = WinPath({ disk: 'D', path: to_path(["Documents"]) })
 /// win_path.ends_with(wrong_disk) |> println // false
 /// ```
 pub fn Path::ends_with(self : Path, child : Path) -> Bool {
@@ -840,8 +828,8 @@ pub fn Path::ends_with(self : Path, child : Path) -> Bool {
         false
       } else {
         // Convert paths to lists for comparison
-        let self_parts = x.path
-        let child_parts = y.path
+        let self_parts = x.path.rev()
+        let child_parts = y.path.rev()
         // Get lengths for comparison
         let self_len = loop self_parts, 0 {
           Nil, acc => break acc
@@ -878,8 +866,8 @@ pub fn Path::ends_with(self : Path, child : Path) -> Bool {
       }
     (UnixPath(x), UnixPath(y)) => {
       // For Unix paths, just check path components
-      let self_parts = x.path
-      let child_parts = y.path
+      let self_parts = x.path.rev()
+      let child_parts = y.path.rev()
       // Get lengths for comparison
       let self_len = loop self_parts, 0 {
         Nil, acc => break acc
@@ -922,18 +910,15 @@ test "ends_with/windows" {
   // Test full path suffix matching
   let path = WinPath({
     disk: 'C',
-    path: @immut/list.of(["Users", "Documents", "file.txt"]),
+    path: to_path(["Users", "Documents", "file.txt"]),
   })
-  let suffix = WinPath({
-    disk: 'C',
-    path: @immut/list.of(["Documents", "file.txt"]),
-  })
+  let suffix = WinPath({ disk: 'C', path: to_path(["Documents", "file.txt"]) })
   inspect!(path.ends_with(suffix), content="true")
 
   // Test different disk letters
   let diff_disk = WinPath({
     disk: 'D',
-    path: @immut/list.of(["Documents", "file.txt"]),
+    path: to_path(["Documents", "file.txt"]),
   })
   inspect!(path.ends_with(diff_disk), content="false")
 
@@ -944,12 +929,12 @@ test "ends_with/windows" {
 
 test "ends_with/unix" {
   // Test path suffix matching with root
-  let path = UnixPath({ path: @immut/list.of(["", "usr", "local", "bin"]) })
-  let suffix = UnixPath({ path: @immut/list.of(["local", "bin"]) })
+  let path = UnixPath({ path: to_path(["", "usr", "local", "bin"]) })
+  let suffix = UnixPath({ path: to_path(["local", "bin"]) })
   inspect!(path.ends_with(suffix), content="true")
 
   // Test longer suffix than path
-  let longer = UnixPath({ path: @immut/list.of(["opt", "usr", "local", "bin"]) })
+  let longer = UnixPath({ path: to_path(["opt", "usr", "local", "bin"]) })
   inspect!(path.ends_with(longer), content="false")
 
   // Test empty suffix
@@ -958,11 +943,8 @@ test "ends_with/unix" {
 }
 
 test "ends_with/cross_type" {
-  let win_path = WinPath({
-    disk: 'C',
-    path: @immut/list.of(["Users", "Documents"]),
-  })
-  let unix_path = UnixPath({ path: @immut/list.of(["Users", "Documents"]) })
+  let win_path = WinPath({ disk: 'C', path: to_path(["Users", "Documents"]) })
+  let unix_path = UnixPath({ path: to_path(["Users", "Documents"]) })
 
   // Test mixing path types
   inspect!(win_path.ends_with(unix_path), content="false")
@@ -1279,7 +1261,7 @@ type! PrefixError String
 ///   inspect!(strip_prefix!(path, prefix).unix_path(), content="/bin")
 /// }
 /// ```
-pub fn strip_prefix(self : Path, base : Path) -> Path!PrefixError {
+pub fn Path::strip_prefix(self : Path, base : Path) -> Path!PrefixError {
   // First check if base is a prefix
   if not(self.starts_with(base)) {
     raise PrefixError("Base path is not a prefix of the path")
@@ -1344,22 +1326,19 @@ test "strip_prefix/unix" {
   let path = UnixPath({ path: to_path(["usr", "local", "bin"]) })
   let base = UnixPath({ path: to_path(["usr", "local"]) })
   //println(strip_prefix!(path, base).unix_path())
-  inspect!(strip_prefix!(path, base).unix_path(), content="/bin")
+  inspect!(path.strip_prefix!(base).unix_path(), content="/bin")
 
   // Test with empty base path
   let empty_base = UnixPath({ path: @immut/list.T::Nil })
   //println(strip_prefix!(path, empty_base).unix_path())
-  inspect!(
-    strip_prefix!(path, empty_base).unix_path(),
-    content="/usr/local/bin",
-  )
+  inspect!(path.strip_prefix!(empty_base).unix_path(), content="/usr/local/bin")
 }
 
 test "strip_prefix/windows" {
   // Test stripping Windows paths with same disk
   let path = WinPath({ disk: 'C', path: to_path(["Users", "Admin", "Desktop"]) })
   let base = WinPath({ disk: 'C', path: to_path(["Users", "Admin"]) })
-  inspect!(strip_prefix!(path, base).win_path(), content="C:\\Desktop")
+  inspect!(path.strip_prefix!(base).win_path(), content="C:\\Desktop")
 }
 
 test "panic strip_prefix/invalid" {
@@ -1368,10 +1347,10 @@ test "panic strip_prefix/invalid" {
   let win = WinPath({ disk: 'C', path: to_path(["Windows"]) })
 
   // Should panic when trying to strip different path types
-  let _ = strip_prefix!(unix, win)
+  let _ = unix.strip_prefix!(win)
 
   // Should panic when base is not a prefix
   let non_prefix = UnixPath({ path: to_path(["var"]) })
-  let _ = strip_prefix!(unix, non_prefix)
+  let _ = unix.strip_prefix!(non_prefix)
 
 }

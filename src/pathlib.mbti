@@ -8,10 +8,6 @@ fn path(String) -> Path!@strconv.StrConvError
 
 fn to_path(Array[String]) -> @list.T[String]
 
-fn unix_path(Path) -> String
-
-fn win_path(Path) -> String
-
 // Types and methods
 pub(all) enum Path {
   WinPath(WPath)
@@ -29,14 +25,23 @@ impl Path {
   join(Self, Self) -> Self
   parent(Self) -> Self
   starts_with(Self, Self) -> Bool
+  strip_prefix(Self, Self) -> Self!PrefixError
+  unix_path(Self) -> String
+  win_path(Self) -> String
   with_added_extension(Self, String) -> Self
   with_extension(Self, String) -> Self
   with_file_name(Self, String) -> Self
 }
+impl Eq for Path
+impl Show for Path
+
+type PrefixError
 
 type UPath
+impl Eq for UPath
 
 type WPath
+impl Eq for WPath
 
 // Type aliases
 
