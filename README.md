@@ -211,14 +211,17 @@ no_ext_path.extension() |> println // ""
 
 Checks if the path is absolute.
 
+- **Attention**: It uses `""` in first element to mean it doesn't have a root(`/`). 
+And `to_path` will add `/` if the first element is not `""`.
+
 #### Examples
 ```moonbit
 // Unix path starting with root is absolute
-let unix_path = UnixPath({ path: @immut/list.of(["", "usr", "bin"]) })
+let unix_path = UnixPath({ path: to_path(["usr", "bin"]) })
 unix_path.is_absolute() |> println // true
 
 // Windows path needs both valid disk and root to be absolute
-let win_path = WinPath({ disk: 'C', path: @immut/list.of(["", "Windows"]) })
+let win_path = WinPath({ disk: 'C', path: to_path(["Windows"]) })
 win_path.is_absolute() |> println // true
 ```
 
@@ -229,11 +232,11 @@ Checks if the path is relative.
 #### Examples
 ```moonbit
 // Unix relative path
-let unix_path = UnixPath({ path: @immut/list.of(["usr", "bin"]) })
+let unix_path = UnixPath({ path: to_path(["", "usr", "bin"]) })
 unix_path.is_relative() |> println // true
 // Windows absolute path
-let win_path = WinPath({ disk: 'C', path: @immut/list.of(["", "Windows"]) })
-win_path.is_relative() |> println // false
+let win_path = WinPath({ disk: 'C', path: to_path(["", "Windows"]) })
+win_path.is_relative() |> println // true
 ```
 
 ### pub fn Path::has_root(self : Path) -> Bool
@@ -243,10 +246,10 @@ Checks if the path has a root component.
 #### Examples
 ```moonbit
 // Unix path with root
-let unix_path = UnixPath({ path: @immut/list.of(["", "usr", "bin"]) })
+let unix_path = UnixPath({ path: to_path(["usr", "bin"]) })
 unix_path.has_root() |> println // true
 // Windows path without valid disk is not absolute, so no root
-let win_path = WinPath({ disk: 'C', path: @immut/list.of(["Windows"]) })
+let win_path = WinPath({ disk: 'C', path: to_path(["", "Windows"]) })
 win_path.has_root() |> println // false
 ```
 
@@ -256,12 +259,12 @@ Checks if the path starts with a given base.
 
 #### Examples
 ```moonbit
-let base = UnixPath({ path: @immut/list.of(["usr", "bin"]) })
-let path = UnixPath({ path: @immut/list.of(["usr", "bin", "python"]) })
+let base = UnixPath({ path: to_path(["usr", "bin"]) })
+let path = UnixPath({ path: to_path(["usr", "bin", "python"]) })
 path.starts_with(base) |> println // true
 
 // Different path types never start with each other
-let win_path = WinPath({ disk: 'C', path: @immut/list.of(["Users"]) })
+let win_path = WinPath({ disk: 'C', path: to_path(["Users"]) })
 win_path.starts_with(base) |> println // false
 ```
 
@@ -272,16 +275,16 @@ Checks if the path ends with a given child.
 #### Examples
 ```moonbit
 // Unix path ending check
-let path = UnixPath({ path: @immut/list.of(["usr", "local", "bin"]) })
-let suffix = UnixPath({ path: @immut/list.of(["local", "bin"]) })
+let path = UnixPath({ path: to_path(["usr", "local", "bin"]) })
+let suffix = UnixPath({ path: to_path(["local", "bin"]) })
 path.ends_with(suffix) |> println // true
 
 // Windows path requires matching disk letter
 let win_path = WinPath({
   disk: 'C',
-  path: @immut/list.of(["Users", "Documents"]),
+  path: to_path(["Users", "Documents"]),
 })
-let wrong_disk = WinPath({ disk: 'D', path: @immut/list.of(["Documents"]) })
+let wrong_disk = WinPath({ disk: 'D', path: to_path(["Documents"]) })
 win_path.ends_with(wrong_disk) |> println // false
 ```
 
