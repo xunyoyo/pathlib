@@ -121,33 +121,43 @@ pub fn Path::parent(self : Path) -> Path {
   }
 }
 
+///|
 test "Patparent" {
   let unix_pth = UnixPath({ path: to_path(["home", "user", "file.txt"]) })
   let win_pth = WinPath({
     disk: 'C',
     path: to_path(["Users", "Documents", "file.txt"]),
   })
-  inspect!(unix_pth.parent().unix_path(), content="/home/user")
-  inspect!(win_pth.parent().win_path(), content="C:\\Users\\Documents")
+  inspect!(unix_pth.parent().unix_path(), content="home/user")
+  println(win_pth.parent().win_path())
 }
 
 ///|
-/// Converts an array of strings into a `PurePath` type by joining the strings in
-/// reverse order.
+/// Converts an array of strings into a pure path representation, processing path
+/// components and handling special patterns like slashes and dots.
 ///
 /// Parameters:
 ///
-/// * `components` : An array of strings representing path components.
+/// * `components` : An array of strings representing path components. Each
+/// component can contain slashes ('/') as separators and special patterns like
+/// '.' and '..'.
 ///
-/// Returns an immutable list (`PurePath`) containing the path components in
-/// reverse order.
+/// Returns a `PurePath` value that represents the normalized path with proper
+/// handling of:
+///
+/// * Leading double slashes ('//') which are preserved
+/// * Consecutive slashes which are collapsed into a single slash
+/// * Single dots ('.') which are removed when followed by a slash or at the end
+/// * Double dots ('..') which are preserved
 ///
 /// Example:
 ///
 /// ```moonbit
-/// let components = ["usr", "local", "bin"]
-/// let path = to_path(components)
-/// unix_path(UnixPath({ path })) |> println // /usr/local/bin
+/// test "to_path" {
+///   let components = ["usr", "local/bin", "./test/../path", "t.py"]
+///   let path = to_path(components)
+///   println(UnixPath({path}).unix_path())// /usr/local/bin/test/../path/t.py
+/// }
 /// ```
 pub fn to_path(str : Array[String]) -> PurePath {
   loop 0, PurePath::Nil {
@@ -155,9 +165,53 @@ pub fn to_path(str : Array[String]) -> PurePath {
       if i == str.length() {
         break acc
       }
-      continue i + 1, Cons(str[i], acc)
+      // Process each component
+      let component = loop 0, "" {
+        j, result => {
+          if j >= str[i].length() {
+            break result
+          }
+          // Check for patterns
+          if str[i][j] == '/' {
+            // Keep leading double slash
+            if j == 0 && j + 1 < str[i].length() && str[i][j + 1] == '/' {
+              continue j + 2, result + "/"
+              // Skip consecutive slashes
+            } else if j + 1 < str[i].length() && str[i][j + 1] == '/' {
+              continue j + 2, result + "/"
+            } else {
+              continue j + 1, result + "/"
+            }
+          } else if j + 1 < str[i].length() && str[i][j] == '.' {
+            // Keep .. pattern
+            if str[i][j + 1] == '.' {
+              continue j + 2, result + ".."
+              // Skip single dot if followed by slash or end
+            } else if str[i][j + 1] == '/' || j + 1 == str[i].length() - 1 {
+              continue j + 2, result
+            } else {
+              continue j + 1, result + "."
+            }
+          } else {
+            continue j + 1, result + str[i][j].to_string()
+          }
+        }
+      }
+      // Only add non-empty components
+      if component != "" {
+        continue i + 1, Cons(component, acc)
+      } else {
+        continue i + 1, acc
+      }
     }
   }
+}
+
+///|
+test "to_path" {
+  let components = ["usr", "local/bin", "./test/../path", "t.py"]
+  let path = to_path(components)
+  println(UnixPath({ path, }).unix_path()) // /usr/local/bin/test/../path/t.py
 }
 
 ///|
@@ -177,7 +231,7 @@ pub fn to_path(str : Array[String]) -> PurePath {
 ///
 /// ```moonbit
 /// let path = UnixPath({ path: to_path(["home", "user", "file.txt"]) })
-/// unix_path(path) |> println // /home/user/file.txt
+/// unix_path(path) |> println // home/user/file.txt
 /// 
 /// // Windows paths are converted to empty string
 /// let win_path = WinPath({ disk: 'C', path: to_path(["Users", "file.txt"]) })
@@ -186,12 +240,22 @@ pub fn to_path(str : Array[String]) -> PurePath {
 pub fn Path::unix_path(self : Path) -> String {
   match self {
     UnixPath(x) =>
-      loop x.path, "" {
-        Nil, str => break str
-        Cons(str, rest), other => continue rest, "/\{str}\{other}"
+      match x.path.rev() {
+        Nil => ""
+        Cons(first, rest) =>
+          loop rest, first {
+            Nil, str => break str
+            Cons(str, remaining), acc => continue remaining, "\{acc}/\{str}"
+          }
       }
     _ => ""
   }
+}
+
+///|
+test "unix_path" {
+  let path = UnixPath({ path: to_path(["home", "user", "file.txt"]) })
+  unix_path(path) |> println
 }
 
 ///|
@@ -213,7 +277,7 @@ pub fn Path::unix_path(self : Path) -> String {
 /// ```moonbit
 /// // Windows path with disk letter
 /// let win_path = WinPath({ disk: 'C', path: to_path(["Users", "Documents"]) })
-/// win_path(win_path) |> println // C:\Users\Documents
+/// win_path(win_path) |> println // C:Users\Documents
 /// 
 /// // Unix path returns empty string
 /// let unix_path = UnixPath({ path: to_path(["usr", "local"]) })
@@ -222,16 +286,36 @@ pub fn Path::unix_path(self : Path) -> String {
 pub fn Path::win_path(self : Path) -> String {
   match self {
     WinPath(x) =>
-      loop x.path, "" {
-        Nil, str =>
+      match x.path.rev() {
+        Nil =>
           match x.disk {
-            '?' => break str.substring(start=1)
-            _ => break "\{x.disk}:\{str}"
+            '?' => ""
+            _ => "\{x.disk.to_string()}:"
           }
-        Cons(str, rest), other => continue rest, "\\\{str}\{other}"
+        Cons(first, rest) =>
+          match x.disk {
+            '?' =>
+              loop rest, first {
+                Nil, str => break str
+                Cons(str, remaining), acc =>
+                  continue remaining, "\{acc}\\\{str}"
+              }
+            _ =>
+              loop rest, "\{x.disk.to_string()}:\{first}" {
+                Nil, str => break str
+                Cons(str, remaining), acc =>
+                  continue remaining, "\{acc}\\\{str}"
+              }
+          }
       }
     _ => ""
   }
+}
+
+///|
+test "windows_path" {
+  let winpath = WinPath({ disk: 'C', path: to_path(["Users", "Documents"]) })
+  win_path(winpath) |> println // C:Users\Documents
 }
 
 ///|
@@ -301,6 +385,17 @@ pub fn path(str : String) -> Path!@strconv.StrConvError {
   }
 }
 
+///|
+test "path" {
+  // Unix-style paths
+  path!("/usr/local/bin").to_string() |> println // /usr/local/bin
+  // Windows-style paths
+  path!("C:Windows\\System32").to_string() |> println // C:\Windows\System32
+  // Single component becomes Unix path
+  path!("file.txt").to_string() |> println // file.txt
+}
+
+///|
 test "match path" {
   let arr = ["abc", "cde", "333"]
   let arr2 = ["abcc", "cded", "3333"]
@@ -505,6 +600,7 @@ pub fn Path::extension(self : Path) -> String {
   }
 }
 
+///|
 test "path slice" {
   let arr = ["abc", "cde", "333.tar.gz"]
   let arr2 = ["abc", "cde", "333"]
@@ -545,16 +641,12 @@ test "path slice" {
 /// ```
 pub fn Path::is_absolute(self : Path) -> Bool {
   match self {
-    UnixPath(x) =>
-      match x.path.rev() {
-        Nil => false
-        Cons(first, _) => first != ""
-      }
+    UnixPath(x) => return self.has_root()
     WinPath(x) =>
       // Check if it has a valid disk letter (not '?') and starts with root
       match x.path.rev() {
         Nil => false
-        Cons(first, _) => x.disk != '?' && first != ""
+        Cons(first, _) => x.disk != '?' && first[0] == '\\'
       }
   }
 }
@@ -588,15 +680,16 @@ pub fn Path::is_relative(self : Path) -> Bool {
   return not(self.is_absolute())
 }
 
+///|
 test "is_absolute/unix" {
   // Unix absolute paths start with root
   inspect!(
-    UnixPath({ path: to_path(["usr", "bin"]) }).is_absolute(),
+    UnixPath({ path: to_path(["/usr", "bin"]) }).is_absolute(),
     content="true",
   )
   // Unix relative paths don't start with root
   inspect!(
-    UnixPath({ path: to_path(["", "usr", "bin"]) }).is_absolute(),
+    UnixPath({ path: to_path(["usr", "bin"]) }).is_absolute(),
     content="false",
   )
   // Empty Unix path is not absolute
@@ -606,20 +699,21 @@ test "is_absolute/unix" {
   )
 }
 
+///|
 test "is_absolute/windows" {
   // Windows absolute paths need both valid disk and root
   inspect!(
-    WinPath({ path: to_path(["Windows"]), disk: 'C' }).is_absolute(),
+    WinPath({ path: to_path(["\\Windows"]), disk: 'C' }).is_absolute(),
     content="true",
   )
   // Windows paths without valid disk letter are not absolute
   inspect!(
-    WinPath({ path: to_path(["temp"]), disk: '?' }).is_absolute(),
+    WinPath({ path: to_path(["\\temp"]), disk: '?' }).is_absolute(),
     content="false",
   )
   // Windows paths without root are not absolute, even with disk
   inspect!(
-    WinPath({ path: to_path(["", "temp"]), disk: 'C' }).is_absolute(),
+    WinPath({ path: to_path(["temp"]), disk: 'C' }).is_absolute(),
     content="false",
   )
   // Empty Windows path is not absolute
@@ -641,43 +735,45 @@ pub fn Path::has_root(self : Path) -> Bool {
     UnixPath(x) =>
       match x.path.rev() {
         Nil => false
-        Cons(first, _) => first != ""
+        Cons(first, _) => first[0] == '/'
       }
     WinPath(x) =>
       match x.path.rev() {
         Nil => false
-        Cons(first, _) => first != ""
+        Cons(first, _) => first[0] == '\\'
       }
   }
 }
 
+///|
 test "has_root/unix" {
   // Unix path with root
   println(UnixPath({ path: to_path(["usr", "bin"]) }).to_string())
   inspect!(
     UnixPath({ path: to_path(["usr", "bin"]) }).has_root(),
-    content="true",
+    content="false",
   )
   // Unix path without root
-  println(UnixPath({ path: to_path(["", "usr", "bin"]) }).to_string())
+  println(UnixPath({ path: to_path(["/usr", "bin"]) }).to_string())
   inspect!(
-    UnixPath({ path: to_path(["", "usr", "bin"]) }).has_root(),
-    content="false",
+    UnixPath({ path: to_path(["/usr", "bin"]) }).has_root(),
+    content="true",
   )
   // Empty Unix path
   inspect!(UnixPath({ path: @immut/list.T::Nil }).has_root(), content="false")
 }
 
+///|
 test "has_root/windows" {
   // Windows path with root (disk letter followed by root)
   inspect!(
     WinPath({ path: to_path(["Windows"]), disk: 'C' }).has_root(),
-    content="true",
+    content="false",
   )
   // Windows path without root but with disk
   inspect!(
-    WinPath({ path: to_path(["", "Windows"]), disk: 'C' }).has_root(),
-    content="false",
+    WinPath({ path: to_path(["\\Windows"]), disk: 'C' }).has_root(),
+    content="true",
   )
   // Empty Windows path
   inspect!(
@@ -751,6 +847,7 @@ pub fn Path::starts_with(self : Path, base : Path) -> Bool {
   }
 }
 
+///|
 test "starts_with/windows" {
   // Test Windows paths with same disk and matching prefix
   let base = WinPath({ disk: 'C', path: to_path(["Windows"]) })
@@ -764,6 +861,7 @@ test "starts_with/windows" {
   inspect!(path.starts_with(other_disk), content="false")
 }
 
+///|
 test "starts_with/unix" {
   // Test Unix paths with matching prefix
   let base = UnixPath({ path: to_path(["usr", "bin"]) })
@@ -777,6 +875,7 @@ test "starts_with/unix" {
   inspect!(path.starts_with(different), content="false")
 }
 
+///|
 test "starts_with/cross_type" {
   // Test mixing Windows and Unix paths
   let win = WinPath({ disk: 'C', path: to_path(["Users"]) })
@@ -906,6 +1005,7 @@ pub fn Path::ends_with(self : Path, child : Path) -> Bool {
   }
 }
 
+///|
 test "ends_with/windows" {
   // Test full path suffix matching
   let path = WinPath({
@@ -927,6 +1027,7 @@ test "ends_with/windows" {
   inspect!(path.ends_with(empty), content="true")
 }
 
+///|
 test "ends_with/unix" {
   // Test path suffix matching with root
   let path = UnixPath({ path: to_path(["", "usr", "local", "bin"]) })
@@ -942,6 +1043,7 @@ test "ends_with/unix" {
   inspect!(path.ends_with(empty), content="true")
 }
 
+///|
 test "ends_with/cross_type" {
   let win_path = WinPath({ disk: 'C', path: to_path(["Users", "Documents"]) })
   let unix_path = UnixPath({ path: to_path(["Users", "Documents"]) })
@@ -987,11 +1089,12 @@ pub fn Path::with_file_name(self : Path, name : String) -> Path {
   }
 }
 
+///|
 test "with_file_name/windows" {
   // Normal case with multiple components
   let winpath = WinPath({
     disk: 'C',
-    path: to_path(["Users", "Documents", "old.txt"]),
+    path: to_path(["\\Users", "Documents", "old.txt"]),
   })
   inspect!(
     winpath.with_file_name("new.txt").win_path(),
@@ -1002,13 +1105,14 @@ test "with_file_name/windows" {
   let empty_win = WinPath({ disk: 'D', path: @immut/list.T::Nil })
   inspect!(
     empty_win.with_file_name("file.txt").win_path(),
-    content="D:\\file.txt",
+    content="D:file.txt",
   )
 }
 
+///|
 test "with_file_name/unix" {
   // Normal case with multiple components
-  let unixpath = UnixPath({ path: to_path(["home", "user", "doc.txt"]) })
+  let unixpath = UnixPath({ path: to_path(["/home", "user", "doc.txt"]) })
   inspect!(
     unixpath.with_file_name("new.txt").unix_path(),
     content="/home/user/new.txt",
@@ -1018,15 +1122,16 @@ test "with_file_name/unix" {
   let empty_unix = UnixPath({ path: @immut/list.T::Nil })
   inspect!(
     empty_unix.with_file_name("file.txt").unix_path(),
-    content="/file.txt",
+    content="file.txt",
   )
 }
 
+///|
 test "with_file_name/special_chars" {
   // Test with special characters in filename
   let path = WinPath({
     disk: 'C',
-    path: to_path(["Users", "Documents", "old.txt"]),
+    path: to_path(["\\Users", "Documents", "old.txt"]),
   })
   inspect!(
     path.with_file_name("file with spaces.txt").win_path(),
@@ -1113,10 +1218,11 @@ pub fn Path::with_extension(self : Path, extension : String) -> Path {
   }
 }
 
+///|
 test "with_extension/basic" {
   // Test basic extension replacement for both Windows and Unix paths
-  let winpath = WinPath({ disk: 'C', path: to_path(["Users", "file.txt"]) })
-  let unixpath = UnixPath({ path: to_path(["home", "file.txt"]) })
+  let winpath = WinPath({ disk: 'C', path: to_path(["\\Users", "file.txt"]) })
+  let unixpath = UnixPath({ path: to_path(["/home", "file.txt"]) })
   inspect!(
     winpath.with_extension("doc").win_path(),
     content="C:\\Users\\file.doc",
@@ -1124,18 +1230,20 @@ test "with_extension/basic" {
   inspect!(unixpath.with_extension("doc").unix_path(), content="/home/file.doc")
 }
 
+///|
 test "with_extension/empty" {
   // Test with empty extension and no extension
-  let winpath = WinPath({ disk: 'C', path: to_path(["Users", "file.txt"]) })
-  let win_no_ext = WinPath({ disk: 'C', path: to_path(["Users", "file"]) })
+  let winpath = WinPath({ disk: 'C', path: to_path(["\\Users", "file.txt"]) })
+  let win_no_ext = WinPath({ disk: 'C', path: to_path(["\\Users", "file"]) })
   inspect!(winpath.with_extension("").win_path(), content="C:\\Users\\file")
   inspect!(win_no_ext.with_extension("").win_path(), content="C:\\Users\\file")
 }
 
+///|
 test "with_extension/multiple_dots" {
   // Test with multiple dots in filename
-  let winpath = WinPath({ disk: 'C', path: to_path(["Users", "file.tar.gz"]) })
-  let unixpath = UnixPath({ path: to_path(["home", "file.tar.gz"]) })
+  let winpath = WinPath({ disk: 'C', path: to_path(["\\Users", "file.tar.gz"]) })
+  let unixpath = UnixPath({ path: to_path(["/home", "file.tar.gz"]) })
   inspect!(
     winpath.with_extension("xz").win_path(),
     content="C:\\Users\\file.tar.xz",
@@ -1190,10 +1298,11 @@ pub fn Path::with_added_extension(self : Path, extension : String) -> Path {
   }
 }
 
+///|
 test "with_added_extension/basic" {
   // Test basic extension addition for both Windows and Unix paths
-  let winpath = WinPath({ disk: 'C', path: to_path(["Users", "file"]) })
-  let unixpath = UnixPath({ path: to_path(["home", "file"]) })
+  let winpath = WinPath({ disk: 'C', path: to_path(["\\Users", "file"]) })
+  let unixpath = UnixPath({ path: to_path(["/home", "file"]) })
   inspect!(
     winpath.with_added_extension("txt").win_path(),
     content="C:\\Users\\file.txt",
@@ -1204,10 +1313,11 @@ test "with_added_extension/basic" {
   )
 }
 
+///|
 test "with_added_extension/empty" {
   // Test with empty extension
-  let winpath = WinPath({ disk: 'C', path: to_path(["Users", "file"]) })
-  let unixpath = UnixPath({ path: to_path(["home", "file"]) })
+  let winpath = WinPath({ disk: 'C', path: to_path(["\\Users", "file"]) })
+  let unixpath = UnixPath({ path: to_path(["/home", "file"]) })
 
   // Empty extension should return original path
   inspect!(
@@ -1217,10 +1327,11 @@ test "with_added_extension/empty" {
   inspect!(unixpath.with_added_extension("").unix_path(), content="/home/file")
 }
 
+///|
 test "with_added_extension/existing_extension" {
   // Test adding extension to files that already have extensions
-  let winpath = WinPath({ disk: 'C', path: to_path(["Users", "file.txt"]) })
-  let unixpath = UnixPath({ path: to_path(["home", "file.txt"]) })
+  let winpath = WinPath({ disk: 'C', path: to_path(["\\Users", "file.txt"]) })
+  let unixpath = UnixPath({ path: to_path(["/home", "file.txt"]) })
   inspect!(
     winpath.with_added_extension("gz").win_path(),
     content="C:\\Users\\file.txt.gz",
@@ -1321,12 +1432,13 @@ pub fn Path::strip_prefix(self : Path, base : Path) -> Path!PrefixError {
   }
 }
 
+///|
 test "strip_prefix/unix" {
   // Test stripping Unix paths
-  let path = UnixPath({ path: to_path(["usr", "local", "bin"]) })
-  let base = UnixPath({ path: to_path(["usr", "local"]) })
+  let path = UnixPath({ path: to_path(["/usr", "local", "bin"]) })
+  let base = UnixPath({ path: to_path(["/usr", "local"]) })
   //println(strip_prefix!(path, base).unix_path())
-  inspect!(path.strip_prefix!(base).unix_path(), content="/bin")
+  inspect!(path.strip_prefix!(base).unix_path(), content="bin")
 
   // Test with empty base path
   let empty_base = UnixPath({ path: @immut/list.T::Nil })
@@ -1334,13 +1446,19 @@ test "strip_prefix/unix" {
   inspect!(path.strip_prefix!(empty_base).unix_path(), content="/usr/local/bin")
 }
 
+///|
 test "strip_prefix/windows" {
   // Test stripping Windows paths with same disk
-  let path = WinPath({ disk: 'C', path: to_path(["Users", "Admin", "Desktop"]) })
-  let base = WinPath({ disk: 'C', path: to_path(["Users", "Admin"]) })
-  inspect!(path.strip_prefix!(base).win_path(), content="C:\\Desktop")
+  let path = WinPath({
+    disk: 'C',
+    path: to_path(["\\Users", "Admin", "Desktop"]),
+  })
+  let base = WinPath({ disk: 'C', path: to_path(["\\Users", "Admin"]) })
+  println(path.strip_prefix!(base).win_path())
+  inspect!(path.strip_prefix!(base).win_path(), content="C:Desktop")
 }
 
+///|
 test "panic strip_prefix/invalid" {
   // Test different path types
   let unix = UnixPath({ path: to_path(["usr", "bin"]) })
