@@ -646,7 +646,10 @@ pub fn Path::is_absolute(self : Path) -> Bool {
       // Check if it has a valid disk letter (not '?') and starts with root
       match x.path.rev() {
         Nil => false
-        Cons(first, _) => x.disk != '?' && first[0] == '\\'
+        Cons(first, _) =>
+          (x.disk != '?' && first[0] == '\\') ||
+          (first.length() >= 2 && first[0] == '/' && first[1] == '/') ||
+          (first.length() >= 2 && first[0] == '\\' && first[1] == '\\')
       }
   }
 }
@@ -715,6 +718,10 @@ test "is_absolute/windows" {
   inspect!(
     WinPath({ path: to_path(["temp"]), disk: 'C' }).is_absolute(),
     content="false",
+  )
+  inspect!(
+    WinPath({ path: to_path(["//some/share"]), disk: '?' }).is_absolute(),
+    content="true",
   )
   // Empty Windows path is not absolute
   inspect!(

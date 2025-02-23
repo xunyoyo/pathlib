@@ -1,7 +1,7 @@
 # Pathlib
 
 This repository contains a library of pathlib implemented in Moonbit. 
-This library provides methods for path handling, mainly referring to pathlib in **python** and std::path in **rust**. 
+This library provides methods for path handling, mainly referring to `pathlib` in `python` and `std::path` in `rust`. 
 The procedure in this case is a pure function and does not involve system I/O.
 It is compatible with both Windows and Unix paths.
 
@@ -222,7 +222,8 @@ no_ext_path.extension() |> println // ""
 Checks if the path is absolute.
 
 In unix, it's equal to `has_root`.
-In Windows, it's equal to `has_root` and `disk != "?"`.
+In Windows, it's equal to `has_root` and `disk != "?"`, or it's a `UNC` path.
+A `UNC` path is a path that starts with `\\` or `//`.
 
 #### Examples
 ```moonbit
@@ -233,6 +234,10 @@ unix_path.is_absolute() |> println // true
 // Windows path needs both valid disk and root to be absolute
 let win_path = WinPath({ disk: 'C', path: to_path(["\\Windows"]) })
 win_path.is_absolute() |> println // true
+
+// When Windows path is a UNC Path
+let win_path2 = WinPath({ disk: '?', path: to_path(["//some/share"]) })
+win_path2.is_absolute() |> println // true
 ```
 
 ### pub fn Path::is_relative(self : Path) -> Bool
@@ -252,6 +257,7 @@ win_path.is_relative() |> println // true
 ### pub fn Path::has_root(self : Path) -> Bool
 
 Checks if the path has a root component.
+If a Windows path is a `UNC` path, it's considered to have a root.
 
 #### Examples
 ```moonbit
