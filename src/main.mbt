@@ -156,7 +156,7 @@ test "Patparent" {
 /// test "to_path" {
 ///   let components = ["usr", "local/bin", "./test/../path", "t.py"]
 ///   let path = to_path(components)
-///   println(UnixPath({path}).unix_path())// /usr/local/bin/test/../path/t.py
+///   println(UnixPath({path}).unix_path())// usr/local/bin/test/../path/t.py
 /// }
 /// ```
 pub fn to_path(str : Array[String]) -> PurePath {
@@ -175,7 +175,7 @@ pub fn to_path(str : Array[String]) -> PurePath {
           if str[i][j] == '/' {
             // Keep leading double slash
             if j == 0 && j + 1 < str[i].length() && str[i][j + 1] == '/' {
-              continue j + 2, result + "/"
+              continue j + 2, result + "//"
               // Skip consecutive slashes
             } else if j + 1 < str[i].length() && str[i][j + 1] == '/' {
               continue j + 2, result + "/"
@@ -211,7 +211,7 @@ pub fn to_path(str : Array[String]) -> PurePath {
 test "to_path" {
   let components = ["usr", "local/bin", "./test/../path", "t.py"]
   let path = to_path(components)
-  println(UnixPath({ path, }).unix_path()) // /usr/local/bin/test/../path/t.py
+  println(UnixPath({ path, }).unix_path()) // usr/local/bin/test/../path/t.py
 }
 
 ///|
@@ -255,7 +255,7 @@ pub fn Path::unix_path(self : Path) -> String {
 ///|
 test "unix_path" {
   let path = UnixPath({ path: to_path(["home", "user", "file.txt"]) })
-  unix_path(path) |> println
+  Path::unix_path(path) |> println
 }
 
 ///|
@@ -315,7 +315,7 @@ pub fn Path::win_path(self : Path) -> String {
 ///|
 test "windows_path" {
   let winpath = WinPath({ disk: 'C', path: to_path(["Users", "Documents"]) })
-  win_path(winpath) |> println // C:Users\Documents
+  Path::win_path(winpath) |> println // C:Users\Documents
 }
 
 ///|
@@ -641,7 +641,7 @@ test "path slice" {
 /// ```
 pub fn Path::is_absolute(self : Path) -> Bool {
   match self {
-    UnixPath(x) => return self.has_root()
+    UnixPath(_) => return self.has_root()
     WinPath(x) =>
       // Check if it has a valid disk letter (not '?') and starts with root
       match x.path.rev() {
@@ -740,7 +740,12 @@ pub fn Path::has_root(self : Path) -> Bool {
     WinPath(x) =>
       match x.path.rev() {
         Nil => false
-        Cons(first, _) => first[0] == '\\'
+        Cons(first, _) =>
+          // Check for normal Windows root path
+          first[0] == '\\' ||
+          // Check for UNC (network share) paths that start with // or \\
+          (first.length() >= 2 && first[0] == '/' && first[1] == '/') ||
+          (first.length() >= 2 && first[0] == '\\' && first[1] == '\\')
       }
   }
 }
@@ -779,6 +784,10 @@ test "has_root/windows" {
   inspect!(
     WinPath({ path: @immut/list.T::Nil, disk: 'C' }).has_root(),
     content="false",
+  )
+  inspect!(
+    WinPath({ path: to_path(["//some/share"]), disk: '?' }).has_root(),
+    content="true",
   )
 }
 
@@ -1382,15 +1391,10 @@ pub fn Path::strip_prefix(self : Path, base : Path) -> Path!PrefixError {
       // Get lengths
       let xx = x.path.rev()
       let yy = y.path.rev()
-      let self_len = loop xx, 0 {
-        Nil, acc => break acc
-        Cons(_, rest), acc => continue rest, acc + 1
-      }
       let base_len = loop yy, 0 {
         Nil, acc => break acc
         Cons(_, rest), acc => continue rest, acc + 1
       }
-
       // Skip prefix components
       let mut remaining = xx
       for i = 0; i < base_len; i = i + 1 {
@@ -1399,7 +1403,6 @@ pub fn Path::strip_prefix(self : Path, base : Path) -> Path!PrefixError {
           Nil => ()
         }
       }
-
       // Return new path with same disk letter
       WinPath({ path: remaining.rev(), disk: x.disk })
     }
@@ -1407,15 +1410,10 @@ pub fn Path::strip_prefix(self : Path, base : Path) -> Path!PrefixError {
       // Get lengths 
       let xx = x.path.rev()
       let yy = y.path.rev()
-      let self_len = loop xx, 0 {
-        Nil, acc => break acc
-        Cons(_, rest), acc => continue rest, acc + 1
-      }
       let base_len = loop yy, 0 {
         Nil, acc => break acc
         Cons(_, rest), acc => continue rest, acc + 1
       }
-
       // Skip prefix components
       let mut remaining = xx
       for i = 0; i < base_len; i = i + 1 {
@@ -1424,7 +1422,6 @@ pub fn Path::strip_prefix(self : Path, base : Path) -> Path!PrefixError {
           Nil => ()
         }
       }
-
       // Return new Unix path
       UnixPath({ path: remaining.rev() })
     }
