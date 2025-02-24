@@ -1,7 +1,7 @@
 # Pathlib
 
 This repository contains a library of pathlib implemented in Moonbit. 
-This library provides methods for path handling, mainly referring to pathlib in **python** and std::path in **rust**. 
+This library provides methods for path handling, mainly referring to `pathlib` in `python` and `std::path` in `rust`. 
 The procedure in this case is a pure function and does not involve system I/O.
 It is compatible with both Windows and Unix paths.
 
@@ -75,9 +75,9 @@ Joins two paths together. The behavior depends on the type of the second.
 #### Examples
 
 ```moonbit
-let unix1 = UnixPath({ path: to_path(["home", "user"]) })
-let unix2 = UnixPath({ path: to_path(["documents", "file.txt"]) })
-let win = WinPath({ disk: 'C', path: to_path(["Users", "file.txt"]) })
+let unix1 = UnixPath({ path: to_path(["/home", "user"]) })
+let unix2 = UnixPath({ path: to_path(["/documents", "file.txt"]) })
+let win = WinPath({ disk: 'C', path: to_path(["\\Users", "file.txt"]) })
 unix_path(unix1.join(unix2)) |> println // /home/user/documents/file.txt
 win_path(unix1.join(win)) |> println // C:\Users\file.txt
 ```
@@ -88,10 +88,10 @@ Returns the parent directory component of the path.
 
 #### Examples
 ```moonbit
-let unix_path = UnixPath({ path: to_path(["home", "user", "file.txt"]) })
+let unix_path = UnixPath({ path: to_path(["/home", "user", "file.txt"]) })
 let win_path = WinPath({
   disk: 'C',
-  path: to_path(["Users", "Documents", "file.txt"]),
+  path: to_path(["\\Users", "Documents", "file.txt"]),
 })
 unix_path.parent() |> println // /home/user
 win_path.parent() |> println // C:\Users\Documents
@@ -103,9 +103,19 @@ Converts an array of strings into a `PurePath` type by joining the strings in re
 
 #### Examples
 ```moonbit
-let components = ["usr", "local", "bin"]
+let components = ["/usr", "local", "bin"]
 let path = to_path(components)
 unix_path(UnixPath({ path })) |> println // /usr/local/bin
+```
+
+Spurious slashes and single dots are collapsed, but double dots ('..') and leading double slashes ('//') are not.
+
+```moonbit
+test "to_path" {
+  let components = ["/usr", "local/bin", "./test/../path", "t.py"]
+  let path = to_path(components)
+  println(UnixPath({path}).unix_path())// /usr/local/bin/test/../path/t.py
+}
 ```
 
 ### pub fn Path::unix_path(self : Path) -> String
@@ -114,7 +124,7 @@ Converts a path to its Unix representation.
 
 #### Examples
 ```moonbit
-let path = UnixPath({ path: to_path(["home", "user", "file.txt"]) })
+let path = UnixPath({ path: to_path(["/home", "user", "file.txt"]) })
 unix_path(path) |> println // /home/user/file.txt
 ```
 
@@ -124,7 +134,7 @@ Converts a path to its Windows representation.
 
 #### Examples
 ```moonbit
-let win_path = WinPath({ disk: 'C', path: to_path(["Users", "Documents"]) })
+let win_path = WinPath({ disk: 'C', path: to_path(["\\Users", "Documents"]) })
 win_path(win_path) |> println // C:\Users\Documents
 ```
 
@@ -135,8 +145,8 @@ Provide win_path and unix_path to string.
 #### Examples
 
 ```moonbit
-let winpath = WinPath({ disk: 'C', path: to_path(["Users", "Documents"]) })
-let unixpath = UnixPath({ path: to_path(["user", "local"]) })
+let winpath = WinPath({ disk: 'C', path: to_path(["\\Users", "Documents"]) })
+let unixpath = UnixPath({ path: to_path(["/user", "local"]) })
 println(winpath.to_string()) // C:\Users\Documents
 println(unixpath.to_string()) // /user/local
 ```
@@ -148,12 +158,12 @@ Creates a Path instance from a string representation of a file system path.
 #### Examples
 ```moonbit
 test "path" {
-// Unix-style paths
-path!("/usr/local/bin").to_string() |> println // /usr/local/bin
-// Windows-style paths
-path!("C:\\Windows\\System32").to_string() |> println // C:\Windows\System32
-// Single component becomes Unix path
-path!("file.txt").to_string() |> println // file.txt
+  // Unix-style paths
+  path!("/usr/local/bin").to_string() |> println // /usr/local/bin
+  // Windows-style paths
+  path!("C:\\Windows\\System32").to_string() |> println // C:\Windows\System32
+  // Single component becomes Unix path
+  path!("file.txt").to_string() |> println // file.txt
 }
 ```
 
@@ -163,8 +173,8 @@ Returns the file name component of the path.
 
 #### Examples
 ```moonbit
-let unix_path = UnixPath({ path: to_path(["home", "user", "document.txt"]) })
-let win_path = WinPath({ disk: 'C', path: to_path(["Users", "file.pdf"]) })
+let unix_path = UnixPath({ path: to_path(["/home", "user", "document.txt"]) })
+let win_path = WinPath({ disk: 'C', path: to_path(["\\Users", "file.pdf"]) })
 unix_path.file_name() |> println // document.txt
 win_path.file_name() |> println // file.pdf
 ```
@@ -175,8 +185,8 @@ Returns the file stem (name without extension) of the path.
 
 #### Examples
 ```moonbit
-let unix_path = UnixPath({ path: to_path(["home", "user", "document.txt"]) })
-let win_path = WinPath({ disk: 'C', path: to_path(["Users", "file.tar.gz"]) })
+let unix_path = UnixPath({ path: to_path(["/home", "user", "document.txt"]) })
+let win_path = WinPath({ disk: 'C', path: to_path(["\\Users", "file.tar.gz"]) })
 unix_path.file_stem() |> println // document
 win_path.file_stem() |> println // file
 ```
@@ -187,8 +197,8 @@ Returns the prefix of the file name in a path, including all except the last ext
 
 #### Examples
 ```moonbit
-let win_path = WinPath({ disk: 'C', path: to_path(["Users", "file.tar.gz"]) })
-let unix_path = UnixPath({ path: to_path(["home", "document.txt"]) })
+let win_path = WinPath({ disk: 'C', path: to_path(["\\Users", "file.tar.gz"]) })
+let unix_path = UnixPath({ path: to_path(["/home", "document.txt"]) })
 win_path.file_prefix() |> println // C:\Users\file.tar
 unix_path.file_prefix() |> println // /home/document
 ```
@@ -199,9 +209,9 @@ Returns the file extension of the path.
 
 #### Examples
 ```moonbit
-let win_path = WinPath({ disk: 'C', path: to_path(["Users", "file.tar.gz"]) })
-let unix_path = UnixPath({ path: to_path(["home", "document.txt"]) })
-let no_ext_path = UnixPath({ path: to_path(["home", "README"]) })
+let win_path = WinPath({ disk: 'C', path: to_path(["\\Users", "file.tar.gz"]) })
+let unix_path = UnixPath({ path: to_path(["/home", "document.txt"]) })
+let no_ext_path = UnixPath({ path: to_path(["/home", "README"]) })
 win_path.extension() |> println // gz
 unix_path.extension() |> println // txt
 no_ext_path.extension() |> println // ""
@@ -211,18 +221,23 @@ no_ext_path.extension() |> println // ""
 
 Checks if the path is absolute.
 
-- **Attention**: It uses `""` in first element to mean it doesn't have a root(`/`). 
-And `to_path` will add `/` if the first element is not `""`.
+In unix, it's equal to `has_root`.
+In Windows, it's equal to `has_root` and `disk != "?"`, or it's a `UNC` path.
+A `UNC` path is a path that starts with `\\` or `//`.
 
 #### Examples
 ```moonbit
 // Unix path starting with root is absolute
-let unix_path = UnixPath({ path: to_path(["usr", "bin"]) })
+let unix_path = UnixPath({ path: to_path(["/usr", "bin"]) })
 unix_path.is_absolute() |> println // true
 
 // Windows path needs both valid disk and root to be absolute
-let win_path = WinPath({ disk: 'C', path: to_path(["Windows"]) })
+let win_path = WinPath({ disk: 'C', path: to_path(["\\Windows"]) })
 win_path.is_absolute() |> println // true
+
+// When Windows path is a UNC Path
+let win_path2 = WinPath({ disk: '?', path: to_path(["//some/share"]) })
+win_path2.is_absolute() |> println // true
 ```
 
 ### pub fn Path::is_relative(self : Path) -> Bool
@@ -232,24 +247,25 @@ Checks if the path is relative.
 #### Examples
 ```moonbit
 // Unix relative path
-let unix_path = UnixPath({ path: to_path(["", "usr", "bin"]) })
+let unix_path = UnixPath({ path: to_path(["usr", "bin"]) })
 unix_path.is_relative() |> println // true
 // Windows absolute path
-let win_path = WinPath({ disk: 'C', path: to_path(["", "Windows"]) })
+let win_path = WinPath({ disk: 'C', path: to_path(["Windows"]) })
 win_path.is_relative() |> println // true
 ```
 
 ### pub fn Path::has_root(self : Path) -> Bool
 
 Checks if the path has a root component.
+If a Windows path is a `UNC` path, it's considered to have a root.
 
 #### Examples
 ```moonbit
 // Unix path with root
-let unix_path = UnixPath({ path: to_path(["usr", "bin"]) })
+let unix_path = UnixPath({ path: to_path(["/usr", "bin"]) })
 unix_path.has_root() |> println // true
 // Windows path without valid disk is not absolute, so no root
-let win_path = WinPath({ disk: 'C', path: to_path(["", "Windows"]) })
+let win_path = WinPath({ disk: 'C', path: to_path(["Windows"]) })
 win_path.has_root() |> println // false
 ```
 
@@ -306,8 +322,8 @@ Replaces or removes the extension of the filename in a path.
 
 #### Examples
 ```moonbit
-let unix_path = UnixPath({ path: to_path(["home", "user", "file.txt"]) })
-let win_path = WinPath({ disk: 'C', path: to_path(["Users", "file.tar.gz"]) })
+let unix_path = UnixPath({ path: to_path(["/home", "user", "file.txt"]) })
+let win_path = WinPath({ disk: 'C', path: to_path(["\\Users", "file.tar.gz"]) })
 
 // Replace extension
 unix_path.with_extension("doc").unix_path() |> println // /home/user/file.doc
@@ -322,7 +338,7 @@ Adds an extension to the filename in a path.
 
 #### Examples
 ```moonbit
-let path = UnixPath({ path: to_path(["home", "user", "file.txt"]) })
+let path = UnixPath({ path: to_path(["/home", "user", "file.txt"]) })
 unix_path(path.with_added_extension("gz")) |> println // /home/user/file.txt.gz
 ```
 
@@ -333,9 +349,9 @@ Removes a prefix from a path, returning the path relative to the prefix.
 #### Examples
 ```moonbit
 test "strip_prefix" {
-  let path = UnixPath({ path: to_path(["usr", "local", "bin"]) })
-  let prefix = UnixPath({ path: to_path(["usr", "local"]) })
-  inspect!(strip_prefix!(path, prefix).unix_path(), content="/bin")
+  let path = UnixPath({ path: to_path(["/usr", "local", "bin"]) })
+  let prefix = UnixPath({ path: to_path(["/usr", "local"]) })
+  inspect!(strip_prefix!(path, prefix).unix_path(), content="bin")
 }
 ```
 
