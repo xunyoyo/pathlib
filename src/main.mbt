@@ -1476,3 +1476,264 @@ test "panic strip_prefix/invalid" {
   let _ = unix.strip_prefix!(non_prefix)
 
 }
+
+///|
+/// Returns the drive identifier of a path, which includes:
+///
+/// * For Windows paths with a disk letter: returns the disk letter followed by a
+/// colon (e.g., "C:")
+/// * For Windows UNC (Universal Naming Convention) paths: returns the host and
+/// share components (e.g., "\server\share")
+/// * For Unix paths or paths without drive information: returns an empty string
+///
+/// Parameters:
+///
+/// * `self` : The path to extract the drive identifier from. Can be either a
+/// Windows path or a Unix path.
+///
+/// Returns a string containing the drive identifier, or an empty string if no
+/// drive information is available.
+///
+/// Example:
+///
+/// ```moonbit
+/// ///|
+/// test "drive" {
+///   let win_path = WinPath({ disk: 'C', path: to_path(["Users", "Documents"]) })
+///   let unc_path = WinPath({
+///     disk: '?',
+///     path: to_path(["\\\\server\\share\\path"]),
+///   })
+///   let unix_path = UnixPath({ path: to_path(["/usr", "local"]) })
+///   inspect!(win_path.drive(), content="C:")
+///   inspect!(unc_path.drive(), content="\\\\\\\\server\\\\share") //  "\\\\server\\share"
+///   inspect!(unix_path.drive(), content="")
+/// }
+/// ```
+pub fn Path::drive(self : Path) -> String {
+  match self {
+    WinPath(x) =>
+      match x.path.rev() {
+        Nil => if x.disk != '?' { "\{x.disk}:" } else { "" }
+        Cons(first, _) =>
+          // Check for UNC path (//host/share or \\host\share)
+          if first.length() >= 2 && first[0] == '/' && first[1] == '/' {
+            // Extract host and share from UNC path
+            let parts = first.split("/").to_array()
+            if parts.length() >= 2 {
+              "\\\\\\\\\{parts[2]}\\\\\{parts[3]}"
+            } else {
+              ""
+            }
+          } else if first.length() >= 2 && first[0] == '\\' && first[1] == '\\' {
+            // Extract host and share from UNC path
+            let parts = first.split("\\").to_array()
+            if parts.length() >= 2 {
+              "\\\\\\\\\{parts[2]}\\\\\{parts[3]}"
+            } else {
+              ""
+            }
+          } else if x.disk != '?' {
+            // Return disk letter if it exists
+            "\{x.disk}:"
+          } else {
+            ""
+          }
+      }
+    UnixPath(_) => ""
+  }
+}
+
+///|
+test "Path::drive/basic" {
+  // Test basic Windows paths with disk letters
+  let win_c = WinPath({ disk: 'C', path: to_path(["Windows", "System32"]) })
+  let win_d = WinPath({ disk: 'D', path: @immut/list.T::Nil })
+  let win_no_disk = WinPath({ disk: '?', path: to_path(["temp"]) })
+  inspect!(win_c.drive(), content="C:")
+  inspect!(win_d.drive(), content="D:")
+  inspect!(win_no_disk.drive(), content="")
+}
+
+///|
+test "Path::drive/unc" {
+  // Test UNC (network share) paths
+  let unc_forward = WinPath({
+    disk: '?',
+    path: to_path(["//server/share/path"]),
+  })
+  let unc_back = WinPath({
+    disk: '?',
+    path: to_path(["\\\\server\\share\\path"]),
+  })
+  println(unc_forward.drive()) //  "\\\\server\\share"
+  println(unc_back.drive()) //  "\\\\server\\share"
+}
+
+///|
+test "Path::drive/unix" {
+  // Test Unix paths and empty paths
+  let unix = UnixPath({ path: to_path(["/usr", "bin"]) })
+  let empty_unix = UnixPath({ path: @immut/list.T::Nil })
+  let empty_win = WinPath({ disk: '?', path: @immut/list.T::Nil })
+  inspect!(unix.drive(), content="")
+  inspect!(empty_unix.drive(), content="")
+  inspect!(empty_win.drive(), content="")
+}
+
+///|
+/// Returns the root directory component of a path.
+///
+/// For Windows paths:
+///
+/// * Returns "\\" for paths with a root directory (starting with "/" or "")
+/// * Returns "\\" for UNC (Universal Naming Convention) paths (starting with
+/// "//" or "\\")
+/// * Returns an empty string for paths without a root directory
+///
+/// For Unix paths:
+///
+/// * Returns "/" for paths with a root directory (starting with "/")
+/// * Returns an empty string for paths without a root directory
+///
+/// Parameters:
+///
+/// * `self` : The path to get the root directory from. Can be either a Windows
+/// path or a Unix path.
+///
+/// Returns a string representing the root directory component of the path, or an
+/// empty string if the path has no root directory.
+///
+/// Example:
+///
+/// ```moonbit
+/// ///|
+/// test "root" {
+///   // Windows paths
+///   let win_rooted = WinPath({ disk: 'C', path: to_path(["\\Windows"]) })
+///   let win_unc = WinPath({ disk: '?', path: to_path(["\\\\server\\share"]) })
+///   inspect!(win_rooted.root(), content="\\\\")
+///   inspect!(win_unc.root(), content="\\\\")
+///
+///   // Unix paths
+///   let unix_rooted = UnixPath({ path: to_path(["/usr"]) })
+///   inspect!(unix_rooted.root(), content="/")
+/// }
+/// ```
+pub fn Path::root(self : Path) -> String {
+  match self {
+    WinPath(x) =>
+      match x.path.rev() {
+        Nil => ""
+        Cons(first, _) =>
+          // Check for UNC path (//host/share or \\host\share)
+          if (first.length() >= 2 && first[0] == '/' && first[1] == '/') ||
+            (first.length() >= 2 && first[0] == '\\' && first[1] == '\\') {
+            "\\\\"
+          } else if first[0] == '\\' || first[0] == '/' {
+            "\\\\"
+          } else {
+            ""
+          }
+      }
+    UnixPath(x) =>
+      match x.path.rev() {
+        Nil => ""
+        Cons(first, _) =>
+          // Return single "/" even if multiple slashes
+          if first[0] == '/' {
+            "/"
+          } else {
+            ""
+          }
+      }
+  }
+}
+
+///|
+test "root" {
+  // Windows paths
+  let win_rooted = WinPath({ disk: 'C', path: to_path(["\\Windows"]) })
+  let win_unc = WinPath({ disk: '?', path: to_path(["\\\\server\\share"]) })
+  let win_unrooted = WinPath({ disk: 'C', path: to_path(["Windows"]) })
+
+  // Unix paths
+  let unix_rooted = UnixPath({ path: to_path(["/usr"]) })
+  let unix_multiple = UnixPath({ path: to_path(["//usr"]) })
+  let unix_unrooted = UnixPath({ path: to_path(["usr"]) })
+  inspect!(win_rooted.root(), content="\\\\")
+  inspect!(win_unc.root(), content="\\\\")
+  inspect!(win_unrooted.root(), content="")
+  inspect!(unix_rooted.root(), content="/")
+  inspect!(unix_multiple.root(), content="/")
+  inspect!(unix_unrooted.root(), content="")
+}
+
+///|
+/// Returns the anchor component of a path, which is the combination of the drive
+/// and root components. For example:
+///
+/// * For Windows paths with a disk letter and root: "C:\"
+/// * For Windows UNC paths: "\\server\share\"
+/// * For Unix paths with root: "/"
+/// * For paths without drive or root: ""
+///
+/// Parameters:
+///
+/// * `self` : The path to get the anchor from. Can be either a Windows path or
+/// a Unix path.
+///
+/// Returns a string containing the combined drive and root components.
+///
+/// Example:
+///
+/// ```moonbit
+/// let win_path = WinPath({ disk: 'C', path: to_path(["\\Windows"]) })
+/// let unix_path = UnixPath({ path: to_path(["/usr"]) })
+/// win_path.anchor() |> println // C:\\
+/// unix_path.anchor() |> println // /
+/// ```
+pub fn Path::anchor(self : Path) -> String {
+  let drv = self.drive()
+  let rt = self.root()
+  if drv == "" {
+    rt
+  } else if rt == "" {
+    drv
+  } else {
+    drv + rt
+  }
+}
+
+///|
+test "Path::anchor/windows" {
+  // Test Windows paths with disk letter and root
+  let win_rooted = WinPath({ disk: 'C', path: to_path(["\\Windows"]) })
+  inspect!(win_rooted.anchor(), content="C:\\\\")
+
+  // Test Windows path with disk but no root
+  let win_unrooted = WinPath({ disk: 'D', path: to_path(["Program Files"]) })
+  inspect!(win_unrooted.anchor(), content="D:")
+
+  // Test UNC path
+  let win_unc = WinPath({
+    disk: '?',
+    path: to_path(["\\\\server\\share\\path"]),
+  })
+  inspect!(win_unc.anchor(), content="\\\\\\\\server\\\\share\\\\")
+}
+
+///|
+test "Path::anchor/unix" {
+  // Test Unix paths with root
+  let unix_rooted = UnixPath({ path: to_path(["/usr", "local"]) })
+  inspect!(unix_rooted.anchor(), content="/")
+
+  // Test Unix paths without root
+  let unix_unrooted = UnixPath({ path: to_path(["usr", "local"]) })
+  inspect!(unix_unrooted.anchor(), content="")
+
+  // Test empty Unix path
+  let unix_empty = UnixPath({ path: @immut/list.T::Nil })
+  inspect!(unix_empty.anchor(), content="")
+}
