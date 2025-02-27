@@ -14,6 +14,9 @@ pub(all) enum Path {
   UnixPath(UPath)
 }
 impl Path {
+  anchor(Self) -> String
+  as_posix(Self) -> String
+  drive(Self) -> String
   ends_with(Self, Self) -> Bool
   extension(Self) -> String
   file_name(Self) -> String
@@ -24,6 +27,8 @@ impl Path {
   is_relative(Self) -> Bool
   join(Self, Self) -> Self
   parent(Self) -> Self
+  parents(Self) -> Array[Self]
+  root(Self) -> String
   starts_with(Self, Self) -> Bool
   strip_prefix(Self, Self) -> Self!PrefixError
   unix_path(Self) -> String

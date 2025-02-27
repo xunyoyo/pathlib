@@ -40,6 +40,13 @@ pub(all) enum Path {
 } derive(Eq)
 ```
 
+### PurePath
+
+```moonbit
+typealias PurePath = @immut/list.T[String]
+```
+
+
 ## Feature
 
 ### Methods
@@ -65,6 +72,11 @@ pub(all) enum Path {
 | `with_extension` | Returns a new path with the specified file extension. |
 | `with_added_extension` | Returns a new path with the specified file extension added. |
 | `strip_prefix` | Returns a new path with the specified prefix removed. |
+| `drive` | Returns the drive component of a path. |
+| `root` | Returns the root component of a path. |
+| `anchor` | Returns the anchor component of a path. |
+| `as_posix` | Returns a string representation of the path using POSIX-style separators(forward slashes). |
+| `parents` | Returns an array containing all parent components of a path in descending order.|
 
 ## Usages
 
@@ -342,7 +354,7 @@ let path = UnixPath({ path: to_path(["/home", "user", "file.txt"]) })
 unix_path(path.with_added_extension("gz")) |> println // /home/user/file.txt.gz
 ```
 
-### pub fn strip_prefix(self : Path, base : Path) -> Path!PrefixError
+### pub fn Path::strip_prefix(self : Path, base : Path) -> Path!PrefixError
 
 Removes a prefix from a path, returning the path relative to the prefix.
 
@@ -352,6 +364,109 @@ test "strip_prefix" {
   let path = UnixPath({ path: to_path(["/usr", "local", "bin"]) })
   let prefix = UnixPath({ path: to_path(["/usr", "local"]) })
   inspect!(strip_prefix!(path, prefix).unix_path(), content="bin")
+}
+```
+
+### pub fn Path::drive(self : Path) -> String
+
+Returns the drive identifier of a path, which includes:
+
+* For Windows paths with a disk letter: returns the disk letter followed by a
+colon (e.g., "C:")
+* For Windows UNC (Universal Naming Convention) paths: returns the host and
+share components (e.g., "\\\\server\\share")
+* For Unix paths or paths without drive information: returns an empty string
+
+#### Examples
+```moonbit
+test "drive" {
+  let win_path = WinPath({ disk: 'C', path: to_path(["Users", "Documents"]) })
+  let unc_path = WinPath({
+    disk: '?',
+    path: to_path(["\\\\server\\share\\path"]),
+  })
+  let unix_path = UnixPath({ path: to_path(["/usr", "local"]) })
+  inspect!(win_path.drive(), content="C:")
+  inspect!(unc_path.drive(), content="\\\\\\\\server\\\\share") //  "\\\\server\\share"
+  inspect!(unix_path.drive(), content="")
+}
+```
+
+### pub fn Path::root(self : Path) -> String
+
+Returns the root directory component of a path.
+
+For Windows paths:
+
+* Returns "\\" for paths with a root directory (starting with "/" or "")
+* Returns "\\" for UNC (Universal Naming Convention) paths (starting with
+"//" or "\\")
+* Returns an empty string for paths without a root directory
+
+For Unix paths:
+
+* Returns "/" for paths with a root directory (starting with "/")
+* Returns an empty string for paths without a root directory
+
+#### Examples
+```moonbit
+test "root" {
+  // Windows paths
+  let win_rooted = WinPath({ disk: 'C', path: to_path(["\\Windows"]) })
+  let win_unc = WinPath({ disk: '?', path: to_path(["\\\\server\\share"]) })
+  inspect!(win_rooted.root(), content="\\\\")
+  inspect!(win_unc.root(), content="\\\\")
+
+  // Unix paths
+  let unix_rooted = UnixPath({ path: to_path(["/usr"]) })
+  inspect!(unix_rooted.root(), content="/")
+}
+```
+
+### pub fn Path::anchor(self : Path) -> String
+
+Returns the anchor component of a path, which is the combination of the drive
+and root components.
+
+#### Examples
+```moonbit
+let win_path = WinPath({ disk: 'C', path: to_path(["\\Windows"]) })
+let unix_path = UnixPath({ path: to_path(["/usr"]) })
+win_path.anchor() |> println // C:\\
+unix_path.anchor() |> println // /
+```
+
+### pub fn Path::as_posix(self : Path) -> String
+
+Returns a string representation of the path using POSIX-style separators
+(forward slashes). For Windows paths, converts backslashes to forward slashes
+and changes the format of UNC paths and drive letters to follow POSIX
+conventions.
+
+#### Examples
+```moonbit
+test "as_posix" {
+  let win_path = WinPath({ disk: 'C', path: to_path(["Windows\\System32"]) })
+  let unc_path = WinPath({ disk: '?', path: to_path(["\\\\server\\share"]) })
+  inspect!(win_path.as_posix(), content="C:/Windows/System32")
+  inspect!(unc_path.as_posix(), content="//server/share")
+}
+```
+
+### pub fn Path::parents(self : Path) -> Array[Path]
+
+Returns an array containing all parent components of a path in descending
+order (i.e., from the most specific to the most general).
+
+For example, for a path "/a/b/c", returns \["/a/b", "/a"].
+
+#### Examples
+```moonbit
+test "Path::parents" {
+  let unix_path = UnixPath({ path: to_path(["/usr", "local", "bin"]) })
+  let parents = unix_path.parents()
+  inspect!(parents[0].unix_path(), content="/usr/local")
+  inspect!(parents[1].unix_path(), content="/usr")
 }
 ```
 
