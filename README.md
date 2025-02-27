@@ -75,6 +75,8 @@ typealias PurePath = @immut/list.T[String]
 | `drive` | Returns the drive component of a path. |
 | `root` | Returns the root component of a path. |
 | `anchor` | Returns the anchor component of a path. |
+| `as_posix` | Returns a string representation of the path using POSIX-style separators(forward slashes). |
+| `parents` | Returns an array containing all parent components of a path in descending order.|
 
 ## Usages
 
@@ -432,6 +434,40 @@ let win_path = WinPath({ disk: 'C', path: to_path(["\\Windows"]) })
 let unix_path = UnixPath({ path: to_path(["/usr"]) })
 win_path.anchor() |> println // C:\\
 unix_path.anchor() |> println // /
+```
+
+### pub fn Path::as_posix(self : Path) -> String
+
+Returns a string representation of the path using POSIX-style separators
+(forward slashes). For Windows paths, converts backslashes to forward slashes
+and changes the format of UNC paths and drive letters to follow POSIX
+conventions.
+
+#### Examples
+```moonbit
+test "as_posix" {
+  let win_path = WinPath({ disk: 'C', path: to_path(["Windows\\System32"]) })
+  let unc_path = WinPath({ disk: '?', path: to_path(["\\\\server\\share"]) })
+  inspect!(win_path.as_posix(), content="C:/Windows/System32")
+  inspect!(unc_path.as_posix(), content="//server/share")
+}
+```
+
+### pub fn Path::parents(self : Path) -> Array[Path]
+
+Returns an array containing all parent components of a path in descending
+order (i.e., from the most specific to the most general).
+
+For example, for a path "/a/b/c", returns \["/a/b", "/a"].
+
+#### Examples
+```moonbit
+test "Path::parents" {
+  let unix_path = UnixPath({ path: to_path(["/usr", "local", "bin"]) })
+  let parents = unix_path.parents()
+  inspect!(parents[0].unix_path(), content="/usr/local")
+  inspect!(parents[1].unix_path(), content="/usr")
+}
 ```
 
 ## License
