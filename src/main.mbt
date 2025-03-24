@@ -906,6 +906,116 @@ test "starts_with/cross_type" {
 }
 
 ///|
+/// Calculates a path relative to another base path. For Windows paths, both
+/// paths must share the same disk letter. For Unix paths, no additional
+/// constraints are required besides path compatibility.
+///
+/// Parameters:
+///
+/// * `self` : The source path to make relative.
+/// * `base` : The base path to calculate the relative path from.
+///
+/// Returns a new path representing the relative path from the base path to the
+/// source path. For Windows paths, the resulting path will have no disk letter.
+///
+/// Throws a `PrefixError` if:
+///
+/// * The paths are of different types (Unix vs Windows)
+/// * For Windows paths, the disk letters are different
+/// * The base path is not a prefix of the source path
+///
+/// Example:
+///
+/// ```moonbit
+/// ///|
+/// test "Path::relative_to" {
+///   let source = UnixPath({ path: to_path(["usr", "local", "bin"]) })
+///   let base = UnixPath({ path: to_path(["usr", "local"]) })
+///   inspect!(source.relative_to!(base).unix_path(), content="bin")
+/// }
+/// ```
+pub fn Path::relative_to(self : Path, other : Path) -> Path!PrefixError {
+  // First check if paths are compatible
+  match (self, other) {
+    (WinPath(x), WinPath(y)) => {
+      // For Windows paths, both disk letters must match
+      if x.disk != y.disk {
+        raise PrefixError(
+          "Cannot calculate relative path between different disks",
+        )
+      }
+      // Get the paths as lists
+      let self_parts = x.path.rev()
+      let other_parts = y.path.rev()
+      // Get lengths
+      let other_len = loop other_parts, 0 {
+        Nil, acc => break acc
+        Cons(_, rest), acc => continue rest, acc + 1
+      }
+      // Skip the common prefix
+      let mut remaining = self_parts
+      for i = 0; i < other_len; i = i + 1 {
+        match remaining {
+          Cons(_, rest) => remaining = rest
+          Nil => raise PrefixError("Base path is not a prefix of the path")
+        }
+      }
+      // Return the remaining path components
+      WinPath({ path: remaining, disk: '?' })
+    }
+    (UnixPath(x), UnixPath(y)) => {
+      // Get the paths as lists
+      let self_parts = x.path.rev()
+      let other_parts = y.path.rev()
+      // Get lengths
+      let other_len = loop other_parts, 0 {
+        Nil, acc => break acc
+        Cons(_, rest), acc => continue rest, acc + 1
+      }
+      // Skip the common prefix
+      let mut remaining = self_parts
+      for i = 0; i < other_len; i = i + 1 {
+        match remaining {
+          Cons(_, rest) => remaining = rest
+          Nil => raise PrefixError("Base path is not a prefix of the path")
+        }
+      }
+      // Return the remaining path components
+      UnixPath({ path: remaining })
+    }
+    _ =>
+      raise PrefixError(
+        "Cannot calculate relative path between different path types",
+      )
+  }
+}
+
+///|
+test "Path::relative_to/basic" {
+  // Basic Unix path relative calculation
+  let unix_path = UnixPath({ path: to_path(["/usr", "local", "bin"]) })
+  let unix_base = UnixPath({ path: to_path(["/usr", "local"]) })
+  inspect!(unix_path.relative_to!(unix_base).unix_path(), content="bin")
+
+  // Basic Windows path relative calculation
+  let win_path = WinPath({
+    disk: 'C',
+    path: to_path(["Users", "Admin", "Desktop"]),
+  })
+  let win_base = WinPath({ disk: 'C', path: to_path(["Users", "Admin"]) })
+  inspect!(win_path.relative_to!(win_base).win_path(), content="Desktop")
+}
+
+///|
+test "panic Path::relative_to/different_types" {
+  let unix_path = UnixPath({ path: to_path(["/usr", "local"]) })
+  let win_path = WinPath({ disk: 'C', path: to_path(["Users"]) })
+  // Should panic when mixing path types
+  let _ = unix_path.relative_to!(win_path)
+
+}
+
+///|
 /// Determines if a path ends with a given suffix path. For Windows paths, both
 /// paths must have the same disk letter and matching trailing components. For
 /// Unix paths, only the path components are compared.

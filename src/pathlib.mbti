@@ -28,6 +28,7 @@ impl Path {
   join(Self, Self) -> Self
   parent(Self) -> Self
   parents(Self) -> Array[Self]
+  relative_to(Self, Self) -> Self!PrefixError
   root(Self) -> String
   starts_with(Self, Self) -> Bool
   strip_prefix(Self, Self) -> Self!PrefixError
