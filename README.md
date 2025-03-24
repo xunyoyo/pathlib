@@ -67,6 +67,7 @@ typealias PurePath = @immut/list.T[String]
 | `is_relative` | Checks if a path is relative. |
 | `has_root` | Checks if a path has a root. |
 | `starts_with` | Checks if a path starts with another path. |
+| `relative_to` | Returns a new path relative to the specified base path. 
 | `ends_with` | Checks if a path ends with another path. |
 | `with_file_name` | Returns a new path with the specified filename. |
 | `with_extension` | Returns a new path with the specified file extension. |
@@ -296,6 +297,27 @@ let win_path = WinPath({ disk: 'C', path: to_path(["Users"]) })
 win_path.starts_with(base) |> println // false
 ```
 
+### pub fn Path::relative_to(self : Path, other : Path) -> Path!PrefixError
+
+Calculates a path relative to another base path. For Windows paths, both
+paths must share the same disk letter. For Unix paths, no additional
+constraints are required besides path compatibility.
+
+Throws a `PrefixError` if:
+
+* The paths are of different types (Unix vs Windows)
+* For Windows paths, the disk letters are different
+* The base path is not a prefix of the source path
+
+#### Examples
+```moonbit
+test "Path::relative_to" {
+  let source = UnixPath({ path: to_path(["usr", "local", "bin"]) })
+  let base = UnixPath({ path: to_path(["usr", "local"]) })
+  inspect!(source.relative_to!(base).unix_path(), content="bin")
+}
+```
+
 ### pub fn Path::ends_with(self : Path, child : Path) -> Bool
 
 Checks if the path ends with a given child.
@@ -469,6 +491,10 @@ test "Path::parents" {
   inspect!(parents[1].unix_path(), content="/usr")
 }
 ```
+
+## TODO
+
+`full_match` and `match`: these methods should refer to [Pattern language](https://docs.python.org/3.13/library/pathlib.html#pathlib-pattern-language).
 
 ## License
 
